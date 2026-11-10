@@ -58,7 +58,7 @@ page = """<!doctype html>
 <div class="wrap">
   <header class="top">
     <a class="brand" href="../"><img src="../pairdesk.svg" alt="" width="34" height="34">PairDesk</a>
-    <nav aria-label="Main"><a href="../#install">Install</a><a href="./">Help</a><a href="../issues/">Report a problem</a></nav>
+    <nav aria-label="Main"><a href="../#install">Install</a><a href="./">Help</a><a href="../issues/">Report a problem</a><a href="https://github.com/KnowReva/PairDesk">GitHub</a></nav>
   </header>
   <main class="doc">
     <h1>Help</h1>
@@ -66,7 +66,7 @@ page = """<!doctype html>
     <ul class="toc">%s</ul>
     %s
   </main>
-  <footer><span>PairDesk is a <a href="https://knowreva.com">KnowReva</a> project.</span><a href="../">Home</a><span>MIT licence</span></footer>
+  <footer><span>PairDesk is a <a href="https://knowreva.com">KnowReva</a> project.</span><a href="../">Home</a><a href="https://github.com/KnowReva/PairDesk">Source code</a><a href="https://github.com/KnowReva/PairDesk/blob/main/LICENSE">MIT licence</a></footer>
 </div>
 </body>
 </html>
