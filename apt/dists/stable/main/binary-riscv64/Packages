@@ -1,0 +1,35 @@
+Package: pairdesk
+Architecture: all
+Version: 2.9.2-1
+Priority: optional
+Section: net
+Maintainer: KnowReva <rahul.thakar@knowreva.com>
+Installed-Size: 547
+Depends: python3 (>= 3.9), python3-gi, gir1.2-gtk-3.0, openssh-client, pkexec | policykit-1
+Suggests: freerdp3-x11 | freerdp-x11 | freerdp2-x11, sshfs, openssh-server, openssh-sftp-server, usbip | linux-tools-generic, sudo, avahi-utils, gir1.2-secret-1, xrdp, pipewire-module-xrdp | pulseaudio-module-xrdp, gnome-remote-desktop, nftables | iptables, ethtool
+Conflicts: deskbridge
+Replaces: deskbridge
+Filename: pool/main/pairdesk_2.9.2-1_all.deb
+Size: 144840
+MD5sum: 25a81787d5a531b4166a69bc338ff3f4
+SHA1: ad5f12e28e69ca40a05f6eb8e104cfe79cfe65d1
+SHA256: 81fbe4b70e24e6cfff4e09988a3792d8f19a14ddb2933bef21a7137f9bd77407
+SHA512: 657b90e3a91659370d984bf7e6f5f8894a7138c375c841491f160be37acf1f7fcce7f6e4dbaa300a34ae8947bdc8d1955c187a549819743dfab77f0a41cbae5a
+Homepage: https://pairdesk.knowreva.com
+Description: use another computer's desktop with your USB devices and folders
+ PairDesk connects Linux computers on your network: full remote desktop
+ with clipboard, sound and microphone, plus USB device sharing in both
+ directions (security keys such as YubiKey, webcams, USB drives), and
+ shared folders in both directions.
+ .
+ One package on every computer; a switch turns remote access on or off.
+ Connections use PairDesk's own encrypted link service: it runs as the
+ user on its own port (default 4722), is open only while remote access is
+ on, accepts only computers paired with a one-time code, and carries the
+ desktop, USB devices and folders over one connection.
+ .
+ Only Python, GTK and the SSH client are required. The viewer, folder
+ sharing, SSH server, USB sharing and other add-ons are installed when first
+ needed, after PairDesk explains what they are for; pairdesk-uninstall
+ removes them again.
+

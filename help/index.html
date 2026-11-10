@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PairDesk help</title>
+<meta name="description" content="How to set up PairDesk, pair computers, share USB devices and folders, fix problems and uninstall.">
+<link rel="icon" href="../favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <a class="brand" href="../"><img src="../pairdesk.svg" alt="" width="34" height="34">PairDesk</a>
+    <nav aria-label="Main"><a href="../#install">Install</a><a href="./">Help</a><a href="../issues/">Report a problem</a></nav>
+  </header>
+  <main class="doc">
+    <h1>Help</h1>
+    <p>The same help is in the app: press <b>?</b> in PairDesk's title bar. <b>Check this computer</b> there finds most problems by itself.</p>
+    <ul class="toc"><li><a href="#start">Getting started</a></li><li><a href="#pairing">Pairing and unpairing</a></li><li><a href="#sharing">Connecting and sharing</a></li><li><a href="#usb">USB devices</a></li><li><a href="#desktop">Desktop server problems</a></li><li><a href="#updates">Updating PairDesk</a></li><li><a href="#check">Check this computer</a></li><li><a href="#network">Connection problems</a></li><li><a href="#keys">The desktop window and its toolbar</a></li><li><a href="#sound">Sound and microphone</a></li><li><a href="#camera">Cameras</a></li><li><a href="#headless">Computers without a monitor</a></li><li><a href="#remove">Uninstalling</a></li></ul>
+    <section id="start"><h2>Getting started</h2>
+<p><b>Two computers, two roles</b><br>The computer you sit at <b>connects</b>; the computer you want to see <b>accepts connections</b>. A computer can do both.</p>
+<p><b>On the computer you want to reach</b></p><ol><li>Current computer > turn on <b>Let paired computers connect</b>.</li><li>If a <b>Set up…</b> button shows next to Desktop sharing, press it once.</li></ol>
+<p><b>On the computer you sit at</b></p><ol><li>Connect tab > <b>+</b>. PairDesk lists the computers on your network that accept connections: pick one, or type its address (just the IP, e.g. 192.168.1.20) > <b>Next</b>.</li><li>If you can sign in to it with SSH, press <b>Pair over SSH</b>: no code needed. Otherwise type the code that pops up on the other computer.</li><li>Press <b>Connect now</b>.</li></ol>
+<p><b>Other computer not set up yet?</b> If it accepts SSH logins, the <b>+</b> wizard offers <b>Set it up over SSH</b>: it installs PairDesk there if needed and turns remote access on. You type that computer's password once per session; PairDesk never saves it.</p>
+<p>Nothing is installed or changed without asking first.</p></section>
+<section id="pairing"><h2>Pairing and unpairing</h2>
+<p><b>Pairing</b> lets two computers trust each other. It uses a one-time code instead of a password.</p>
+<p><b>Add a remote computer</b> (the <b>+</b> on the computer you sit at): choose the computer or type its IP; PairDesk fills in the rest and asks it to show a code. Type the code, or press <b>Pair over SSH</b>: you sign in with that computer's password and PairDesk pairs by itself, with no code to type (best for a computer without a screen).<br><b>Pair a new computer</b> (on the computer to reach): shows a code before anyone asks.<br>In a terminal: <code>pairdesk scan</code> lists computers, <code>pairdesk pair 192.168.1.20</code> pairs, <code>pairdesk pair 192.168.1.20 --ssh</code> pairs over SSH without a code, and <code>pairdesk pairing</code> (on the other computer, e.g. over SSH) shows the code.</p>
+<p>Codes have 16 characters, work once, for 10 minutes, with 3 tries, and only for the computer that asked for them. They're hidden until you press <b>Show</b>. Both computers prove they know the code, so nobody in between can take part. Each pairing attempt uses a new random key, like a one-time password; nothing is shared between installs.</p>
+<p>Settings > <b>Accept pairing requests only after I press "Pair a new computer"</b>: other computers can't make a code appear here by themselves. Pairing over SSH still works (the SSH password proves it's you).</p>
+<p><b>Unpair</b>: Current computer > Paired computers > Unpair. It removes the pairing on both computers. If the other one can't be reached, it removes it by itself the next time PairDesk starts there or tries to connect.</p></section>
+<section id="sharing"><h2>Connecting and sharing</h2>
+<p>Open <b>Options</b> on the Connect tab to choose what to share:</p><ul><li><b>Full desktop</b>, <b>Full screen</b>, <b>Use all current monitors</b></li><li><b>Remote sound</b> and <b>Current microphone</b></li><li><b>Shared clipboard</b>: copy on one computer, paste on the other</li><li><b>Share current folder</b> / <b>Open remote shared folder</b>: each computer's "PairDesk Shared" folder appears on the other in ~/PairDesk/&lt;name&gt; (Settings changes which folder, or makes it read-only)</li><li><b>Current printers on remote</b> (with xrdp)</li><li><b>Picture</b>: Best for a wired network, Fast for weak Wi-Fi</li><li><b>Direct desktop stream</b>: faster on slow computers; uses the link automatically when not possible</li><li><b>In app menu</b> / <b>Connect when I log in</b>: one-click shortcuts</li></ul>
+<p>Wi-Fi drops are handled: PairDesk reconnects by itself and puts devices and folders back.</p></section>
+<section id="usb"><h2>USB devices</h2>
+<p>USB devices (security keys like YubiKey, webcams, drives) can be used on the other computer, in both directions.</p>
+<ol><li>Once on each computer: <b>Set up USB sharing</b> (Settings, or the bar at the top). It needs your admin password once.</li><li>Connect tab > USB devices: flip the switch next to a device. <b>Current computer → send to remote</b> lends yours; <b>Remote → use on current</b> borrows theirs.</li></ol>
+<p>While lent, a device can't be used on its own computer. It comes back when you flip the switch off or disconnect. Devices plugged in later are sent automatically if their switch is on. PairDesk warns before you lend your own keyboard, mouse or touchscreen.</p></section>
+<section id="desktop"><h2>Desktop server problems</h2>
+<p>The computer you reach needs a <b>desktop server</b>. Current computer > Status > Desktop sharing > <b>Set up…</b> offers:</p><ul><li><b>GNOME Remote Login</b> (Ubuntu/GNOME): you choose a user name and password for remote logins.</li><li><b>xrdp</b> (any desktop): log in with the normal user name and password. It makes its own desktop, so no monitor is needed.</li></ul>
+<p><b>"Error connecting to user session"</b> or a grey screen with xrdp:</p><ul><li>xorgxrdp is missing: Set up… installs it, or run <code>sudo apt install xorgxrdp</code> there.</li><li>The same user is signed in on that computer's screen: PairDesk offers to sign that session out after a 30-second notice there (anyone there can cancel).</li></ul>
+<p><b>Ubuntu 25.10 and later, GNOME 49 and later</b>: GNOME runs only on Wayland, so xrdp can't start it ("Error connecting to user session"). Switch that computer to <b>GNOME Remote Login</b> with Set up…, or over SSH: <code>pairdesk desktop gnome</code></p>
+<p><b>Login failed</b>: with GNOME Remote Login use the user name and password chosen there; with xrdp, the normal login.</p></section>
+<section id="updates"><h2>Updating PairDesk</h2>
+<p>With the KnowReva apt repository, PairDesk updates with your normal system updates.</p>
+<p><b>Between paired computers</b>: when you connect and one computer has a newer PairDesk, PairDesk asks before signing in: <b>Update first</b> or <b>Skip and connect</b>.</p><ul><li>This computer is older: the newer version is copied from the remote computer and installed here.</li><li>The remote computer is older: your version is sent there. If someone is signed in on its screen, it asks there; otherwise a terminal installs it over SSH (its password, then its admin password).</li></ul>
+<p>Nothing is installed without an administrator's password on the computer being updated.</p>
+<p>Skipped the terminal? The update waits there. Install it later over SSH: <code>pairdesk update --install</code><br>From a terminal: <code>pairdesk update NAME</code></p>
+<p>Both computers need PairDesk 2.7.0 or later. Update an older one once from its own screen, or with <b>+</b> > Set it up over SSH.</p></section>
+<section id="check"><h2>Check this computer</h2>
+<p>Help (?) > <b>Check this computer…</b> looks at everything PairDesk needs and says what to do about anything that's missing. It changes nothing by itself.</p>
+<p>It checks the network, the viewer, whether paired computers answer, remote access, the desktop server, whether PairDesk keeps running when nobody is signed in, and USB sharing.</p>
+<p><b>Copy report</b> puts the result on the clipboard, handy when asking for help.<br>Over SSH: <code>pairdesk doctor</code></p></section>
+<section id="network"><h2>Connection problems</h2>
+<p><b>"No PairDesk computer answers"</b></p><ul><li>Remote access is off there: Current computer > turn it on.</li><li>A firewall blocks the port: <code>sudo ufw allow 4722/tcp</code> (or the port shown in Settings > Connection).</li><li>Wrong address: use the one shown on that computer (Current computer > Address).</li></ul>
+<p><b>Computer is asleep</b>: PairDesk sends Wake-on-LAN automatically. It needs Ethernet and Wake-on-LAN turned on in that computer's BIOS. While connected, the remote computer stays awake.</p>
+<p><b>"Removed its pairing"</b>: the other computer unpaired. Pair again.</p>
+<p><b>Still stuck?</b> Help > Open log file, and look at the last lines.</p></section>
+<section id="keys"><h2>The desktop window and its toolbar</h2>
+<p>The remote desktop opens in PairDesk's own window. Its <b>toolbar</b> has everything for the session:</p><ul><li><b>USB devices</b>: send a device of this computer, or use one of the remote computer, also ones plugged in during the session.</li><li><b>Camera</b>: send a camera as video (see Cameras).</li><li><b>Folders</b>: open the remote computer's folder, or your shared folder.</li><li>The PairDesk window, <b>minimize</b>, <b>full screen</b> on/off and <b>Disconnect</b>.</li></ul>
+<p>In full screen the toolbar drops down when the mouse touches the <b>top edge</b> of the screen.</p>
+<p>Settings > Desktop window switches back to the viewer's own window (its bar: minimize, full screen, close; Ctrl+Alt+Enter leaves full screen). Several monitors also use the viewer's own window.</p>
+<p>Closing the PairDesk main window while connected only minimizes it. The connection ends with <b>Disconnect</b> or when you close the desktop window.</p></section>
+<section id="sound"><h2>Sound and microphone</h2>
+<p>Desktop toolbar > <b>Sound</b>:</p><ul><li><b>Sound of the remote computer</b>: play it here (pick the speakers or headset), on the remote computer's own speakers, or off.</li><li><b>Microphone sent to the remote computer</b>: pick which microphone of this computer, e.g. your headset instead of the laptop's built-in one, or off.</li><li><b>Reduce echo and room noise</b>: cleans up the microphone (useful without a headset).</li></ul>
+<p>The same choices are under Connect > Options (Remote sound, Microphone sent). A change reopens the desktop view for a moment; the remote session itself stays. Choices are remembered for each computer.</p>
+<p>Sounds hollow, like a big room? Pick your headset's microphone instead of the built-in one.</p></section>
+<section id="camera"><h2>Cameras</h2>
+<p>A camera of this computer can be used on the remote computer, for video calls (Teams, Zoom, Meet in a browser) or camera apps. Toolbar > <b>Camera</b> > pick it.</p>
+<p>It's sent as compressed video and shows up there as a camera called <b>PairDesk camera</b> (in the Camera app it can take a few seconds to appear): much smoother than sending it as a USB device, also over Wi-Fi.</p>
+<p>The first time, PairDesk offers what's missing: ffmpeg here, and on the remote computer the virtual camera (v4l2loopback), installed over SSH. With Secure Boot on, the virtual camera driver may need to be allowed once (the message says how).</p>
+<p>A camera sent as a USB device also works, but it needs a lot of bandwidth: on Wi-Fi the picture stutters or shows green bars.</p></section>
+<section id="headless"><h2>Computers without a monitor</h2>
+<p>A computer without a monitor can accept connections. It just needs a one-time setup.</p>
+<p>Help > <b>Set up a computer without a monitor…</b> does it from here over SSH. It opens a terminal that checks each step and asks before changing anything:<br>remote access on, keep running with nobody signed in, xrdp desktop server, automatic sign-in off, no sleeping at the sign-in screen, firewall, pairing.</p>
+<p>PairDesk not installed there yet? <b>+</b> > type its IP > Next: when PairDesk doesn't answer but SSH does, <b>Set it up over SSH</b> copies PairDesk over and installs it first. Pairing then works without its screen: <b>Pair over SSH</b>, no code needed.</p>
+<p>By hand, over SSH on that computer: <code>pairdesk headless-setup</code></p></section>
+<section id="remove"><h2>Uninstalling</h2>
+<p>Settings > <b>Uninstall PairDesk…</b> (or <code>sudo pairdesk-uninstall</code>):</p><ul><li>gives lent USB devices back and undoes setup,</li><li>removes PairDesk and only the add-ons it installed,</li><li>keeps packages you installed yourself or that other software uses,</li><li>keeps the files in your shared folder.</li></ul>
+<p><b>Undo setup</b> (Settings) only turns USB sharing and the network rule off and keeps PairDesk.</p></section>
+
+  </main>
+  <footer><span>PairDesk is a <a href="https://knowreva.com">KnowReva</a> project.</span><a href="../">Home</a><span>MIT licence</span></footer>
+</div>
+</body>
+</html>

@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PairDesk: use another Linux computer, with your USB devices</title>
+<meta name="description" content="PairDesk lets you use another Linux computer as if you were sitting at it: its desktop, sound and clipboard, plus your own USB devices and folders. Free and open source, a KnowReva project.">
+<meta property="og:title" content="PairDesk">
+<meta property="og:description" content="Use another Linux computer as if you were sitting at it, with your USB devices and folders.">
+<meta property="og:image" content="https://pairdesk.knowreva.com/screenshots/connect.png">
+<link rel="canonical" href="https://pairdesk.knowreva.com/">
+<link rel="icon" href="favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <a class="brand" href="./"><img src="pairdesk.svg" alt="" width="34" height="34">PairDesk</a>
+    <nav aria-label="Main">
+      <a href="#what">What it does</a>
+      <a href="#pairing">Pairing</a>
+      <a href="#install">Install</a>
+      <a href="help/">Help</a>
+    </nav>
+  </header>
+
+  <main>
+    <div class="hero">
+      <div>
+        <h1>Sit at one desk. Use the other.</h1>
+        <p class="lead">PairDesk opens another Linux computer on your network as if you were sitting at it:
+          its whole desktop with sound and clipboard, plus the YubiKey, webcam and drives plugged into the
+          computer in front of you.</p>
+        <div class="actions">
+          <a class="btn primary" href="#install">Install PairDesk</a>
+          <a class="btn quiet" href="#pairing">See how pairing works</a>
+        </div>
+      </div>
+      <div class="pairing" aria-label="Example pairing code">
+        <p class="who"><strong>laptop</strong> wants to pair with <strong>office-pc</strong></p>
+        <div class="key" aria-label="Pairing code, hidden until Show is pressed">
+          <span>••••</span><span>••••</span><span>••••</span><span>••••</span>
+        </div>
+        <p class="rule">The code shows on the other computer, hidden until you press Show. It works once, for ten
+          minutes, only for the computer that asked, and no password ever crosses the network.</p>
+      </div>
+    </div>
+
+    <figure class="shot">
+      <img src="screenshots/connect.png" width="1736" height="1490" alt="PairDesk's Connect tab: the remote computer, sharing options, and USB devices to send in each direction" loading="lazy">
+      <figcaption>Pick the computer, choose what to share, flip a switch to send a USB device across.</figcaption>
+    </figure>
+
+    <figure class="shot">
+      <img src="screenshots/desktop.png" width="1200" height="733" alt="The remote computer's desktop in PairDesk's window, with the toolbar's USB devices menu open" loading="lazy">
+      <figcaption>The other computer's desktop in PairDesk's window. The toolbar has USB devices, camera, folders, sound and full screen.</figcaption>
+    </figure>
+
+    <section id="what">
+      <h2>What it does</h2>
+      <p class="sub">One package on every computer. One switch decides whether a computer can be reached.</p>
+      <dl class="does">
+        <div><dt>The whole desktop</dt><dd>Sound, microphone, clipboard and printers, in a window with a toolbar for USB devices, camera, folders and full screen.</dd></div>
+        <div><dt>Your camera, for any app</dt><dd>Send a camera as smooth video. On the other computer it's a normal camera that Teams, Zoom and browsers can use.</dd></div>
+        <div><dt>USB devices, both ways</dt><dd>Use the security key, webcam or drive plugged in here on the other computer, or the other way round.</dd></div>
+        <div><dt>Folders, both ways</dt><dd>Each computer's shared folder shows up on the other one while you're connected.</dd></div>
+        <div><dt>Finds your computers</dt><dd>PairDesk lists the computers on your network that accept connections. Typing just an IP address is enough.</dd></div>
+        <div><dt>Sets up the other computer for you</dt><dd>If you can sign in to it with SSH, PairDesk installs itself there and turns remote access on, without anyone at that screen.</dd></div>
+        <div><dt>Works without a monitor</dt><dd>A small PC in a cupboard keeps accepting connections with nobody signed in, after a short guided setup.</dd></div>
+        <div><dt>Survives Wi-Fi drops</dt><dd>It reconnects by itself and puts your USB devices and folders back. A sleeping computer is woken up first.</dd></div>
+        <div><dt>Keeps both sides up to date</dt><dd>When one computer has a newer PairDesk, it offers it to the other. An administrator there approves it with their password.</dd></div>
+        <div><dt>Leaves nothing behind</dt><dd>Extras are installed only when first needed, after saying why. Uninstalling removes exactly those again.</dd></div>
+      </dl>
+    </section>
+
+    <section id="pairing">
+      <h2>How pairing works</h2>
+      <p class="sub">Two computers trust each other after one short code. There's no account and no cloud.</p>
+      <ol class="steps">
+        <li><strong>Turn on remote access</strong><span>On the computer you want to reach: Current computer, then Let paired computers connect.</span></li>
+        <li><strong>Press + where you sit</strong><span>PairDesk shows the computers it found. Pick one, or type its IP address.</span></li>
+        <li><strong>Sign in or type the code</strong><span>If it accepts SSH logins, sign in with its password and PairDesk pairs by itself. Otherwise type the code shown on its screen.</span></li>
+        <li><strong>Connect</strong><span>From then on it's one button. Pairing is undone on both sides with Unpair.</span></li>
+      </ol>
+      <p class="note">Both computers prove they know the code without sending it, so a computer in between can't take part.
+        Each pairing uses a new random key, like a one-time password. When PairDesk uses SSH for you, it asks that computer's password once per session in its own window and never saves it.</p>
+    </section>
+
+    <section id="install">
+      <h2>Install</h2>
+      <p class="sub">Install it on both computers. Updates then arrive with your normal system updates.</p>
+      <div class="two">
+        <div>
+          <div class="code"><button type="button" data-copy="apt">Copy</button><pre id="apt">sudo wget -qO /usr/share/keyrings/knowreva.gpg https://pairdesk.knowreva.com/apt/knowreva.gpg
+printf 'Types: deb\nURIs: https://pairdesk.knowreva.com/apt\nSuites: stable\nComponents: main\nSigned-By: /usr/share/keyrings/knowreva.gpg\n' | sudo tee /etc/apt/sources.list.d/knowreva.sources
+sudo apt update &amp;&amp; sudo apt install pairdesk</pre></div>
+          <p>After that, PairDesk is in your applications menu, and in App Center or GNOME Software.
+            A downloaded package works too: <code>sudo apt install ./pairdesk_2.9.2-1_all.deb</code></p>
+        </div>
+        <div>
+          <h3>Works on</h3>
+          <ul class="plain">
+            <li>Ubuntu 24.04, 26.04, 26.10 and 27.04</li>
+            <li>Debian 13 (trixie) and 14 (forky)</li>
+            <li>Any desktop, X11 or Wayland (GNOME on Wayland uses GNOME Remote Login)</li>
+          </ul>
+          <h3 style="margin-top:22px">Needs</h3>
+          <p style="margin:0">Only Python, GTK and the SSH client, which every desktop already has. The rest is offered when you first use it.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="safe">
+      <h2>What stays safe</h2>
+      <div class="two">
+        <ul class="plain">
+          <li>Everything travels inside one encrypted connection on PairDesk's own port.</li>
+          <li>That port is closed whenever remote access is off.</li>
+          <li>It runs as you, never as the administrator, and only paired computers get in.</li>
+          <li>A paired computer can only run PairDesk's own requests, not a shell.</li>
+        </ul>
+        <ul class="plain">
+          <li>Free and open source under the MIT licence.</li>
+          <li>No account, no telemetry, nothing sent to KnowReva.</li>
+          <li><a href="help/">Help</a> covers setup, problems and uninstalling.</li>
+        </ul>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <span>PairDesk is a <a href="https://knowreva.com">KnowReva</a> project.</span>
+    <a href="help/">Help</a>
+    <a href="issues/">Report a problem</a>
+    <span>MIT licence</span>
+  </footer>
+</div>
+<script>
+document.querySelectorAll("button[data-copy]").forEach(function (b) {
+  b.addEventListener("click", function () {
+    var text = document.getElementById(b.dataset.copy).innerText;
+    var done = function () { b.textContent = "Copied"; setTimeout(function () { b.textContent = "Copy"; }, 1500); };
+    if (navigator.clipboard) { navigator.clipboard.writeText(text).then(done, function () {}); }
+  });
+});
+</script>
+</body>
+</html>

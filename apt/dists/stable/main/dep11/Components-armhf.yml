@@ -1,0 +1,138 @@
+---
+File: DEP-11
+Version: '1.0'
+Origin: knowreva-stable-main
+---
+Type: desktop-application
+ID: com.knowreva.PairDesk
+Package: pairdesk
+ProjectLicense: MIT
+Name:
+  C: PairDesk
+Summary:
+  C: Use another computer's desktop with your USB devices
+Description:
+  C: |-
+    <p>PairDesk lets you use another Linux computer on your network as if you were sitting at it: its full
+    desktop with sound, microphone and clipboard, plus your own USB devices and folders.</p>
+    <ul>
+      <li>Use a security key (such as a YubiKey), webcam or USB drive plugged into the computer you sit at
+      on the remote computer, or the other way round</li>
+      <li>Shared folders in both directions</li>
+      <li>Pairing with a one-time code: no passwords sent, nobody in between can take part</li>
+      <li>Its own encrypted connection on its own port, open only while remote access is on</li>
+      <li>Reconnects by itself after a Wi-Fi drop and puts devices and folders back</li>
+      <li>Finds computers on your network; a plain IP address is enough</li>
+      <li>Sets up the other computer over SSH if needed, even without its screen</li>
+      <li>Add-ons are installed only when first needed, after explaining what they are for, and removed cleanly</li>
+    </ul>
+    <p>PairDesk is a KnowReva project.</p>
+Developer:
+  id: com.knowreva
+  name:
+    C: KnowReva
+Categories:
+- Network
+- RemoteAccess
+Keywords:
+  C:
+  - remote desktop
+  - usb
+  - yubikey
+  - webcam
+  - rdp
+Url:
+  homepage: https://pairdesk.knowreva.com
+  bugtracker: https://pairdesk.knowreva.com/issues
+  help: https://pairdesk.knowreva.com/help
+Icon:
+  cached:
+  - name: com.knowreva.PairDesk.jxl
+    width: 48
+    height: 48
+  - name: com.knowreva.PairDesk.jxl
+    width: 64
+    height: 64
+  - name: com.knowreva.PairDesk.jxl
+    width: 64
+    height: 64
+    scale: 2
+  - name: com.knowreva.PairDesk.jxl
+    width: 128
+    height: 128
+  - name: com.knowreva.PairDesk.jxl
+    width: 128
+    height: 128
+    scale: 2
+  stock: pairdesk
+Launchable:
+  desktop-id:
+  - com.knowreva.PairDesk.desktop
+Requires:
+- display_length: 720
+Supports:
+- control: pointing
+- control: keyboard
+Provides:
+  binaries:
+  - pairdesk
+Screenshots:
+- default: true
+  caption:
+    C: The other computer's desktop, with PairDesk's toolbar
+  thumbnails: []
+  source-image:
+    url: https://pairdesk.knowreva.com/screenshots/desktop.png
+    width: 1200
+    height: 733
+- caption:
+    C: Connect to a paired computer and choose USB devices to share
+  thumbnails: []
+  source-image:
+    url: https://pairdesk.knowreva.com/screenshots/connect.png
+- caption:
+    C: Welcome screen
+  thumbnails: []
+  source-image:
+    url: https://pairdesk.knowreva.com/screenshots/welcome.png
+- caption:
+    C: Check this computer
+  thumbnails: []
+  source-image:
+    url: https://pairdesk.knowreva.com/screenshots/check.png
+Branding:
+  colors:
+  - type: primary
+    scheme-preference: light
+    value: "#7fb8e8"
+  - type: primary
+    scheme-preference: dark
+    value: "#1d232b"
+Releases:
+- version: "2.9.2"
+  type: stable
+  unix-timestamp: 1794009600
+  description:
+    C: |-
+      <p>The sign-out notice respects Cancel and says so on the connecting computer.</p>
+- version: "2.9.1"
+  type: stable
+  unix-timestamp: 1794009600
+  description:
+    C: |-
+      <p>Fixed signing out the other computer's session from its notice.</p>
+- version: "2.9.0"
+  type: stable
+  unix-timestamp: 1794009600
+  description:
+    C: |-
+      <p>Pairing uses a new random key for every attempt, with nothing shared between installs. Pairing codes
+      are hidden until you press Show.</p>
+- version: "2.8.3"
+  type: stable
+  unix-timestamp: 1794009600
+  description:
+    C: |-
+      <p>Fixes the sent camera; sound devices can be chosen in Options.</p>
+ContentRating:
+  oars-1.1: {}
