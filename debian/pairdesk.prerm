@@ -1,0 +1,27 @@
+#!/bin/sh
+set -e
+if [ "$1" = "remove" ] || [ "$1" = "purge" ]; then
+    # give shared USB devices back and undo setup for every user who ran it
+    for f in /etc/sudoers.d/pairdesk-*; do
+        [ -e "$f" ] || continue
+        u="${f#/etc/sudoers.d/pairdesk-}"
+        env -u SUDO_USER -u PKEXEC_UID /usr/libexec/pairdesk/root-helper unsetup "$u" >/dev/null 2>&1 || true
+    done
+    if [ -d /run/systemd/system ]; then
+        deb-systemd-invoke stop pairdesk-usbipd.service pairdesk-firewall.service >/dev/null 2>&1 || true
+    fi
+    deb-systemd-helper disable pairdesk-usbipd.service pairdesk-firewall.service >/dev/null 2>&1 || true
+    pkill -f "pairdesk-remote hold-awake" >/dev/null 2>&1 || true
+    # stop each user's PairDesk link service (its own port)
+    pkill -f "/usr/bin/pairdesk link-run" >/dev/null 2>&1 || true
+    for h in /root /home/*; do
+        pf="$h/.config/pairdesk/link/sshd.pid"
+        if [ -f "$pf" ]; then kill "$(cat "$pf")" >/dev/null 2>&1 || true; fi
+        rm -f "$h/.config/systemd/user/default.target.wants/pairdesk-link.service"
+    done
+    rm -f /etc/avahi/services/pairdesk.service
+fi
+
+#DEBHELPER#
+
+exit 0

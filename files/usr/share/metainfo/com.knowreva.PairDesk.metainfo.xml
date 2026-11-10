@@ -1,0 +1,194 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.knowreva.PairDesk</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <name>PairDesk</name>
+  <summary>Use another computer's desktop with your USB devices</summary>
+  <developer id="com.knowreva">
+    <name>KnowReva</name>
+  </developer>
+  <description>
+    <p>
+      PairDesk lets you use another Linux computer on your network as if you were sitting at it:
+      its full desktop with sound, microphone and clipboard, plus your own USB devices and folders.
+    </p>
+    <ul>
+      <li>Use a security key (such as a YubiKey), webcam or USB drive plugged into the computer you sit at on the remote computer, or the other way round</li>
+      <li>Shared folders in both directions</li>
+      <li>Pairing with a one-time code: no passwords sent, nobody in between can take part</li>
+      <li>Its own encrypted connection on its own port, open only while remote access is on</li>
+      <li>Reconnects by itself after a Wi-Fi drop and puts devices and folders back</li>
+      <li>Finds computers on your network; a plain IP address is enough</li>
+      <li>Sets up the other computer over SSH if needed, even without its screen</li>
+      <li>Add-ons are installed only when first needed, after explaining what they are for, and removed cleanly</li>
+    </ul>
+    <p>PairDesk is a KnowReva project.</p>
+  </description>
+  <launchable type="desktop-id">com.knowreva.PairDesk.desktop</launchable>
+  <branding>
+    <color type="primary" scheme_preference="light">#7fb8e8</color>
+    <color type="primary" scheme_preference="dark">#1d232b</color>
+  </branding>
+  <icon type="stock">pairdesk</icon>
+  <url type="homepage">https://pairdesk.knowreva.com</url>
+  <url type="help">https://pairdesk.knowreva.com/help</url>
+  <url type="bugtracker">https://pairdesk.knowreva.com/issues</url>
+  <categories>
+    <category>Network</category>
+    <category>RemoteAccess</category>
+  </categories>
+  <keywords>
+    <keyword>remote desktop</keyword>
+    <keyword>usb</keyword>
+    <keyword>yubikey</keyword>
+    <keyword>webcam</keyword>
+    <keyword>rdp</keyword>
+  </keywords>
+  <provides>
+    <binary>pairdesk</binary>
+  </provides>
+  <screenshots>
+    <screenshot type="default">
+      <caption>The other computer's desktop, with PairDesk's toolbar</caption>
+      <image type="source" width="1200" height="733">https://pairdesk.knowreva.com/screenshots/desktop.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Connect to a paired computer and choose USB devices to share</caption>
+      <image>https://pairdesk.knowreva.com/screenshots/connect.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Welcome screen</caption>
+      <image>https://pairdesk.knowreva.com/screenshots/welcome.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Check this computer</caption>
+      <image>https://pairdesk.knowreva.com/screenshots/check.png</image>
+    </screenshot>
+  </screenshots>
+  <content_rating type="oars-1.1"/>
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+  </supports>
+  <requires>
+    <display_length compare="ge">720</display_length>
+  </requires>
+  <releases>
+    <release version="2.9.2" date="2026-11-07">
+      <description>
+        <p>The sign-out notice respects Cancel and says so on the connecting computer.</p>
+      </description>
+    </release>
+    <release version="2.9.1" date="2026-11-07">
+      <description>
+        <p>Fixed signing out the other computer's session from its notice.</p>
+      </description>
+    </release>
+    <release version="2.9.0" date="2026-11-07">
+      <description>
+        <p>Pairing uses a new random key for every attempt, with nothing shared between installs. Pairing codes are hidden until you press Show.</p>
+      </description>
+    </release>
+    <release version="2.8.3" date="2026-11-07">
+      <description>
+        <p>Fixes the sent camera; sound devices can be chosen in Options.</p>
+      </description>
+    </release>
+    <release version="2.8.2" date="2026-11-07">
+      <description>
+        <p>Choose where the remote sound plays and which microphone is sent. The sent camera works in all camera apps.</p>
+      </description>
+    </release>
+    <release version="2.8.1" date="2026-11-07">
+      <description>
+        <p>The Camera menu can take back a camera lent as a USB device and send it as video.</p>
+      </description>
+    </release>
+    <release version="2.8.0" date="2026-11-07">
+      <description>
+        <p>The remote desktop opens in PairDesk's window with a toolbar for USB devices, camera, folders and full screen. Cameras are sent as smooth video and show up as a normal camera on the other computer.</p>
+      </description>
+    </release>
+    <release version="2.7.10" date="2026-11-07">
+      <description>
+        <p>Devices sent from another computer work in remote desktop sessions.</p>
+      </description>
+    </release>
+    <release version="2.7.9" date="2026-11-07">
+      <description>
+        <p>Fixes for the update window and for upgrading with USB sharing set up.</p>
+      </description>
+    </release>
+    <release version="2.7.8" date="2026-11-07">
+      <description>
+        <p>Fixed a repeating USB error.</p>
+      </description>
+    </release>
+    <release version="2.7.7" date="2026-11-07">
+      <description>
+        <p>USB setup from a terminal shows its progress and works with sudo-rs.</p>
+      </description>
+    </release>
+    <release version="2.7.6" date="2026-11-07">
+      <description>
+        <p>Remote access no longer switches the desktop server off; add-ons install over SSH.</p>
+      </description>
+    </release>
+    <release version="2.7.5" date="2026-11-07">
+      <description>
+        <p>Updates install on Ubuntu 26.04; missing add-ons on the other computer are installed over SSH.</p>
+      </description>
+    </release>
+    <release version="2.7.4" date="2026-11-07">
+      <description>
+        <p>Updates are offered before signing in to the other computer. Fixed a crash when disconnecting.</p>
+      </description>
+    </release>
+    <release version="2.7.3" date="2026-11-07">
+      <description>
+        <p>Fixed connecting while an earlier connection to the same computer was still open.</p>
+      </description>
+    </release>
+    <release version="2.7.2" date="2026-11-07">
+      <description>
+        <p>Paired computers are remembered by IP address and found again when it changes.</p>
+      </description>
+    </release>
+    <release version="2.7.1" date="2026-11-07">
+      <description>
+        <p>Fixed a wrong "signed in on the screen" message with GNOME Remote Login.</p>
+      </description>
+    </release>
+    <release version="2.7.0" date="2026-11-07">
+      <description>
+        <p>Paired computers update each other: whichever has the older PairDesk is offered the newer one. GNOME on Wayland (Ubuntu 25.10 and later) works through GNOME Remote Login.</p>
+      </description>
+    </release>
+    <release version="2.6.1" date="2026-11-07">
+      <description>
+        <p>New colours and icon.</p>
+      </description>
+    </release>
+    <release version="2.6.0" date="2026-11-07">
+      <description>
+        <p>Add a remote computer is a wizard: it finds computers on your network, works with a plain IP address, can set up the other computer over SSH and fetch the pairing code over SSH.</p>
+      </description>
+    </release>
+    <release version="2.5.0" date="2026-11-07">
+      <description>
+        <p>New name: PairDesk (was DeskBridge). Upgrading keeps settings and pairings.</p>
+      </description>
+    </release>
+    <release version="2.4.0" date="2026-11-07">
+      <description>
+        <p>Welcome screen, a self-check that explains how to fix problems, a new icon and store-ready packaging.</p>
+      </description>
+    </release>
+    <release version="2.3.1" date="2026-11-07">
+      <description>
+        <p>Clearer next steps after pairing over SSH.</p>
+      </description>
+    </release>
+  </releases>
+</component>

@@ -1,0 +1,49 @@
+Source: pairdesk
+Section: net
+Priority: optional
+Maintainer: KnowReva <rahul.thakar@knowreva.com>
+Build-Depends: debhelper-compat (= 13)
+Build-Depends-Indep: python3
+Standards-Version: 4.7.0
+Homepage: https://pairdesk.knowreva.com
+Rules-Requires-Root: no
+
+Package: pairdesk
+Architecture: all
+Conflicts: deskbridge
+Replaces: deskbridge
+Depends: python3 (>= 3.9),
+         python3-gi,
+         gir1.2-gtk-3.0,
+         openssh-client,
+         pkexec | policykit-1,
+         ${misc:Depends}
+Suggests: freerdp3-x11 | freerdp-x11 | freerdp2-x11,
+          sshfs,
+          openssh-server,
+          openssh-sftp-server,
+          usbip | linux-tools-generic,
+          sudo,
+          avahi-utils,
+          gir1.2-secret-1,
+          xrdp,
+          pipewire-module-xrdp | pulseaudio-module-xrdp,
+          gnome-remote-desktop,
+          nftables | iptables,
+          ethtool
+Description: use another computer's desktop with your USB devices and folders
+ PairDesk connects Linux computers on your network: full remote desktop
+ with clipboard, sound and microphone, plus USB device sharing in both
+ directions (security keys such as YubiKey, webcams, USB drives), and
+ shared folders in both directions.
+ .
+ One package on every computer; a switch turns remote access on or off.
+ Connections use PairDesk's own encrypted link service: it runs as the
+ user on its own port (default 4722), is open only while remote access is
+ on, accepts only computers paired with a one-time code, and carries the
+ desktop, USB devices and folders over one connection.
+ .
+ Only Python, GTK and the SSH client are required. The viewer, folder
+ sharing, SSH server, USB sharing and other add-ons are installed when first
+ needed, after PairDesk explains what they are for; pairdesk-uninstall
+ removes them again.

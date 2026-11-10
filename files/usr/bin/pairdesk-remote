@@ -1,0 +1,333 @@
+#!/usr/bin/python3
+"""PairDesk remote side. Run by PairDesk's own link service as the forced
+command of each paired computer's key (and of a not-yet-paired computer's fresh knock key, let in by
+pairdesk-knock to the pairing gate only), so a key can only run the commands listed here."""
+
+import json
+import os
+import shlex
+import shutil
+import socket
+import subprocess
+import sys
+import threading
+
+sys.path.insert(0, "/usr/lib/pairdesk")
+import dbcore as C  # noqa: E402
+
+
+def reply(obj, code=0):
+    print(json.dumps(obj))
+    sys.stdout.flush()
+    sys.exit(code)
+
+
+def fail(msg):
+    reply({"error": msg}, 1)
+
+
+def exec_sftp():
+    c = C.load_config()
+    d = C.share_dir(c)
+    for s in C.SFTP_SERVERS:
+        if os.path.exists(s):
+            os.execv(s, [s, "-d", d] + (["-R"] if c.get("share_readonly") else []))
+    fail("sftp-server not found")
+
+
+def info(peer, rusb):
+    """Quick status: no root helper, no systemctl; just files and sockets."""
+    c = C.load_config()
+    try:
+        with open("/etc/pairdesk/system.json") as f:
+            st = json.load(f)
+    except (OSError, ValueError):
+        st = {}
+    hold_awake_start(peer, rusb)
+    return {"name": C.hostname(), "version": C.VERSION, "package": C.installed_version(), "mode": c.get("mode"),
+            "rdp_listening": C.port_listening(3389), "rdp_warning": C.desktop_warning(),
+            "rdp_conflict": C.desktop_conflict(),
+            "rsock": os.path.join(C.link_dir(), "folder-%s.sock" % peer),
+            "rdp_backend": st.get("backend") if st.get("server_on") else None,
+            "usb_ready": C.port_listening(3240) and C.setup_done(), "wol": C.wol_targets(),
+            "features": {k: C.feature_present(k) for k in ("folders", "usb", "share-out", "camera-receive")}}
+
+
+def add_pending(feature, peer, why):
+    """Remember that a remote computer wanted something the current computer lacks;
+    PairDesk offers to install it the next time it is opened here."""
+    c = C.load_config()
+    pend = c.setdefault("pending_features", {})
+    pend[feature] = {"peer": peer, "why": why}
+    C.save_config(c)
+
+
+def hold_awake_start(peer, rusb):
+    """Keep this computer from sleeping while the peer's link is up."""
+    if not shutil.which("systemd-inhibit"):
+        return
+    pidf = os.path.join(C.run_dir(), "awake-%d.pid" % rusb)
+    try:
+        os.kill(int(open(pidf).read()), 0)
+        return                       # already running for this link
+    except (OSError, ValueError):
+        pass
+    p = subprocess.Popen(["systemd-inhibit", "--what=sleep:idle", "--who=PairDesk",
+                          "--why=Remote session from %s" % peer, "--mode=block",
+                          "/usr/bin/pairdesk-remote", "hold-awake", str(rusb)],
+                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                         start_new_session=True)
+    with open(pidf, "w") as f:
+        f.write(str(p.pid))
+
+
+def hold_awake(rusb):
+    """Runs under systemd-inhibit; ends 30 s after the peer's link goes away."""
+    import time
+    gone = 0
+    while gone < 30:
+        time.sleep(5)
+        gone = 0 if C.port_listening(rusb) else gone + 5
+    sys.exit(0)
+
+
+def sockcat(path):
+    """stdio <-> unix socket (sshfs uses this to reach the peer's folder through the link)."""
+    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    s.connect(path)
+
+    def up():
+        while True:
+            b = os.read(0, 65536)
+            if not b:
+                s.shutdown(socket.SHUT_WR)
+                return
+            s.sendall(b)
+    threading.Thread(target=up, daemon=True).start()
+    while True:
+        b = s.recv(65536)
+        if not b:
+            break
+        os.write(1, b)
+    sys.exit(0)
+
+
+def mount_peer(peer):
+    if not shutil.which("sshfs"):
+        add_pending("folders", peer, "%s wanted to share its folder with the current computer." % peer)
+        fail("needs-feature:folders")
+    sock = os.path.join(C.link_dir(), "folder-%s.sock" % peer)
+    if not os.path.exists(sock):
+        fail("%s isn't sharing its folder over this connection (its file-sharing helper may be missing)" % peer)
+    target = os.path.join(C.mount_root(), peer)
+    os.makedirs(target, exist_ok=True)
+    C.unmount(target)
+    cmd = ["sshfs", "-o", "ssh_command=/usr/bin/pairdesk-remote sockcat " + sock,
+           "-o", "dir_cache=yes", "-o", "kernel_cache", "-o", "fsname=pairdesk:" + peer,
+           "pairdesk:", target]
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+    if r.returncode != 0:
+        fail("could not open %s's folder here: %s" % (peer, r.stderr.strip()))
+    return {"path": target}
+
+
+def serve(argv):
+    peer, slot = None, None
+    it = iter(argv)
+    for a in it:
+        if a == "--peer":
+            peer = C.safe_name(next(it))
+        elif a == "--slot":
+            slot = int(next(it))
+    orig = shlex.split(os.environ.get("SSH_ORIGINAL_COMMAND", ""))
+    if not orig:
+        fail("interactive login is not allowed for PairDesk keys")
+    c = C.load_config()
+    if c.get("mode") not in ("server", "both"):
+        fail("%s is not accepting connections (remote access is off there)" % C.hostname())
+    if peer not in c["incoming"] or c["incoming"][peer]["slot"] != slot:
+        fail("this computer is no longer paired; pair again")
+    if orig[0] == C.SFTP_MARKER or orig[0].endswith("sftp-server") or orig[0] == "internal-sftp":
+        exec_sftp()
+    rusb = C.slot_ports(slot)[0]
+    if orig[0] != "pairdesk" or len(orig) < 2:
+        fail("unknown command")
+    cmd, args = orig[1], orig[2:]
+    try:
+        if cmd == "info":
+            reply(info(peer, rusb))
+        if cmd == "usb-list":
+            reply({"devices": C.list_local_usb()})
+        if cmd == "usb-export":            # my device -> peer
+            reply(C.helper("usb-bind", args[0], interactive=False))
+        if cmd == "usb-unexport":
+            reply(C.helper("usb-unbind", args[0], interactive=False))
+        if cmd == "usb-import":            # peer device -> me, via its reverse tunnel
+            if int(args[0]) != rusb:
+                fail("port not allowed")
+            reply(C.helper("usb-attach", rusb, args[1], interactive=False))
+        if cmd == "usb-release":
+            if int(args[0]) != rusb:
+                fail("port not allowed")
+            reply(C.helper("usb-detach-from", rusb, args[1], interactive=False))
+        if cmd == "mount-peer":
+            reply(mount_peer(peer))
+        if cmd == "umount-peer":
+            C.unmount(os.path.join(C.mount_root(), peer))
+            try:
+                for p in C.helper("usb-ports", interactive=False).get("ports", []):
+                    if p.get("tcp") == rusb:
+                        C.helper("usb-detach-from", rusb, p["busid"], interactive=False)
+            except C.DBError:
+                pass       # USB sharing not set up here: nothing to release
+            reply({"ok": True})
+        if cmd == "rdp-fingerprint":
+            reply({"sha256": C.rdp_fingerprint("127.0.0.1", 3389)})
+        if cmd == "logout-local":           # show a countdown on this screen, then sign the local session out
+            secs = max(10, min(int(args[0]) if args else 30, 120))
+            ids = C.local_sessions(C.getpass_user())
+            state = C.logout_state_path(peer)
+            if not ids:
+                reply({"state": "none"})
+            with open(state, "w") as f:
+                f.write("waiting")
+            # The sign-out itself is done from here (PairDesk's link keeps running when the session ends).
+            # The notice on the screen only says "now" or "cancelled": a helper started from inside the
+            # session would be ended with it, half way.
+            subprocess.Popen(["/usr/bin/pairdesk-remote", "logout-watch", str(secs), peer] + ids,
+                             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                             start_new_session=True)
+            env = C.session_env()
+            if env.get("DISPLAY") or env.get("WAYLAND_DISPLAY"):
+                subprocess.Popen(["/usr/bin/pairdesk", "--logout-countdown", str(secs), peer] + ids, env=env,
+                                 stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                 start_new_session=True)
+            reply({"state": "waiting", "seconds": secs})
+        if cmd == "logout-status":
+            try:
+                reply({"state": open(C.logout_state_path(peer)).read().strip()})
+            except OSError:
+                reply({"state": "unknown"})
+        if cmd == "unpair":                # the peer removes this pairing: forget it here in both directions
+            C.forget_peer(peer, outgoing=False)
+            if peer in C.load_config()["peers"]:
+                C.forget_peer(peer, outgoing=True)
+            reply({"ok": True})
+        if cmd == "package-get":            # the peer has an older PairDesk: send ours (raw .deb on stdout)
+            path = C.package_for_peer()
+            with open(path, "rb") as f:
+                shutil.copyfileobj(f, sys.stdout.buffer)
+            sys.stdout.flush()
+            sys.exit(0)
+        if cmd == "package-put":            # the peer sends a newer PairDesk: keep it, ask an admin here
+            path, ver = C.receive_package(sys.stdin.buffer, peer)
+            env = C.session_env()
+            if env.get("DISPLAY") or env.get("WAYLAND_DISPLAY"):
+                subprocess.Popen(["/usr/bin/pairdesk", "--offer-update", path, peer], env=env,
+                                 stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                 start_new_session=True)
+                reply({"state": "offered", "version": ver})
+            reply({"state": "saved", "version": ver})
+        if cmd == "camera-start":           # the peer sends a camera as video: get the virtual camera ready
+            if not C.feature_present("camera-receive"):
+                add_pending("camera-receive", peer, "%s wanted to send a camera to the current computer." % peer)
+                fail("needs-feature:camera-receive")
+            reply(C.helper("camera-device", interactive=False))
+        if cmd == "camera-in":              # its video (MJPEG) arrives on stdin and goes into the virtual camera
+            dev = C.helper("camera-device", interactive=False)["device"]
+            # once video flows, ask the system to look at the camera again: apps that find cameras through
+            # PipeWire (the Camera app, GNOME) only list it when it already has video
+            subprocess.Popen(["/usr/bin/pairdesk-remote", "camera-announce"], stdin=subprocess.DEVNULL,
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+            cmdline = C.camera_play_cmd(dev)
+            os.execvp(cmdline[0], cmdline)
+        if cmd == "ping":
+            reply({"ok": True})
+    except (C.DBError, IndexError, ValueError, OSError) as e:
+        fail(str(e) or "bad request")
+    fail("unknown command: %s" % cmd)
+
+
+def pair_code():
+    try:
+        req = json.loads(sys.stdin.read(65536))
+        reply(C.server_accept_code(req))
+    except (C.DBError, KeyError, ValueError) as e:
+        fail(str(e))
+
+
+def pair_gate():
+    """Forced command for a computer that isn't paired yet (let in by pairdesk-knock with its own fresh key):
+    it can only ask for a code to be shown on this screen ("request") or pair with that code ("pair").
+    Without the code it can do nothing, and a code asked for by one key works only for that key."""
+    what = os.environ.get("SSH_ORIGINAL_COMMAND", "").split()[:1]
+    knock = C.knocking_key()
+    try:
+        if what == ["request"]:
+            reply(C.server_pair_request(json.loads(sys.stdin.read(4096)), knock=knock))
+        if what == ["pair"]:
+            reply(C.server_accept_code(json.loads(sys.stdin.read(65536)), knock=knock))
+    except (C.DBError, KeyError, ValueError) as e:
+        fail(str(e))
+    fail("not allowed")
+
+
+def main():
+    if len(sys.argv) < 2:
+        fail("usage: pairdesk-remote serve|pair-code")
+    if sys.argv[1] == "serve":
+        serve(sys.argv[2:])
+    elif sys.argv[1] == "pair-code":
+        pair_code()
+    elif sys.argv[1] == "pair-gate":
+        pair_gate()
+    elif sys.argv[1] == "sockcat" and len(sys.argv) >= 3:
+        sockcat(sys.argv[2])
+    elif sys.argv[1] in ("logout-now", "logout-after") and len(sys.argv) >= 4:
+        import time
+        if sys.argv[1] == "logout-after":
+            time.sleep(int(sys.argv[2]))
+        peer, ids = sys.argv[3], sys.argv[4:]
+        state = C.logout_state_path(peer)
+        with open(state, "w") as f:
+            f.write("signing-out")
+        ok = C.logout_now(ids)
+        with open(state, "w") as f:
+            f.write("done" if ok else "failed")
+        sys.exit(0)
+    elif sys.argv[1] == "logout-watch" and len(sys.argv) >= 4:
+        import time
+        secs, peer, ids = int(sys.argv[2]), sys.argv[3], sys.argv[4:]
+        state = C.logout_state_path(peer)
+        end = time.time() + secs
+        while time.time() < end:
+            try:
+                st = open(state).read().strip()
+            except OSError:
+                st = ""
+            if st == "cancelled":
+                sys.exit(0)
+            if st == "now":
+                break
+            time.sleep(0.3)
+        with open(state, "w") as f:
+            f.write("signing-out")
+        ok = C.logout_now(ids)
+        with open(state, "w") as f:
+            f.write("done" if ok else "failed")
+        sys.exit(0)
+    elif sys.argv[1] == "camera-announce":
+        import time
+        time.sleep(3)
+        try:
+            C.helper("camera-announce", interactive=False)
+        except C.DBError:
+            pass
+        sys.exit(0)
+    elif sys.argv[1] == "hold-awake" and len(sys.argv) == 3:
+        hold_awake(int(sys.argv[2]))
+    fail("unknown mode")
+
+
+if __name__ == "__main__":
+    main()

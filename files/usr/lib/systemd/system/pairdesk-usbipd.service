@@ -1,0 +1,13 @@
+[Unit]
+Documentation=man:pairdesk(1)
+Description=PairDesk USB sharing (USB/IP, reachable only through PairDesk)
+After=network.target pairdesk-firewall.service
+Wants=pairdesk-firewall.service
+
+[Service]
+ExecStart=/usr/libexec/pairdesk/root-helper run-usbipd
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

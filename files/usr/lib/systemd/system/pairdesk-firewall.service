@@ -1,0 +1,14 @@
+[Unit]
+Documentation=man:pairdesk(1)
+Description=PairDesk network protection (keeps USB/IP and RDP off the LAN)
+After=network-pre.target nftables.service
+Before=pairdesk-usbipd.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/libexec/pairdesk/root-helper firewall-apply
+ExecStop=/usr/libexec/pairdesk/root-helper firewall-remove
+
+[Install]
+WantedBy=multi-user.target

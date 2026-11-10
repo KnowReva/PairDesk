@@ -1,0 +1,358 @@
+#!/usr/bin/python3
+"""Remove PairDesk completely and cleanly.
+
+  sudo pairdesk-uninstall              asks before removing anything
+  sudo pairdesk-uninstall --dry-run    only shows what would be removed
+  options: --yes  --keep-ssh-server  --remove-settings  --keep-settings  --remove-tools
+
+What it does, in order:
+  1. Gives every shared USB device back and undoes PairDesk's setup
+     (USB service, network rule, admin permission, desktop server it turned on).
+  2. Removes PairDesk's lines from SSH authorized_keys files and closes
+     shared-folder connections.
+  3. Removes the PairDesk package.
+  4. Removes only the packages PairDesk brought in (found in apt's own
+     history and PairDesk's install record) that nothing else needs any more.
+     Packages you installed yourself, or that other software uses, are kept.
+  5. Optionally deletes PairDesk's settings. Your shared folder files are kept.
+Works for every PairDesk version, including when the package is already gone.
+"""
+
+import glob
+import gzip
+import os
+import pwd
+import re
+import shutil
+import subprocess
+import sys
+
+HELPER = "/usr/libexec/pairdesk/root-helper"
+RECORD = "/var/lib/pairdesk/installed.list"
+REQUESTED = "/var/lib/pairdesk/requested.list"     # add-ons PairDesk installed after asking
+# apt transactions that belong to PairDesk: installing the .deb, its on-demand
+# features (tagged with -o PairDesk::Feature=...), and 1.3's "Install it for me"
+OURS = re.compile(r"pairdesk|PairDesk::Feature|apt-get install -y xrdp")
+# Packages PairDesk (any version) depends on, and their usual libraries. Used when apt's
+# history doesn't show how PairDesk was installed (Software app, dpkg -i + apt -f install).
+# Only removed when nothing else needs them (they show up as unused after PairDesk is gone).
+DEP_RE = re.compile(r"^(freerdp[23]?-(x11|wayland|sdl)|libfreerdp.*|libwinpr.*|sshfs|fuse3?|libfuse3?-.*|usbip|"
+                    r"linux-tools-.*|hwdata|usb\.ids|pci\.ids|libpci3|libnl-.*|libtraceevent1|avahi-(daemon|utils)|"
+                    r"libavahi-core.*|libdaemon0|libnss-mdns|gir1\.2-secret-1|pkexec|xrdp|"
+                    r"(pipewire|pulseaudio)-module-xrdp)$")
+# Front-end tools that may have been marked "installed by you"; offered one by one if unused.
+TOOLS = ["freerdp-x11", "freerdp3-x11", "freerdp2-x11", "sshfs", "usbip", "avahi-utils", "gir1.2-secret-1", "xrdp"]
+NEVER = {"apt", "dpkg", "sudo", "python3", "python3-minimal", "libc6", "systemd", "bash", "coreutils"}
+ABOUT = {
+    "openssh-server": "lets other computers log in to this one with SSH",
+    "sshfs": "opens shared folders over SSH",
+    "freerdp-x11": "remote desktop viewer", "freerdp3-x11": "remote desktop viewer",
+    "freerdp2-x11": "remote desktop viewer",
+    "usbip": "USB over the network", "linux-tools-generic": "kernel tools (USB over the network)",
+    "xrdp": "desktop server", "pipewire-module-xrdp": "sound for xrdp", "pulseaudio-module-xrdp": "sound for xrdp",
+    "avahi-utils": "finds computers on the network", "gir1.2-secret-1": "remembers passwords",
+}
+
+
+def apt(args):
+    """apt-get with live output and progress lines (shown by the app's progress window)."""
+    env = dict(os.environ, DEBIAN_FRONTEND="noninteractive")
+    p = subprocess.Popen(["apt-get", "-o", "APT::Status-Fd=1"] + args, stdout=subprocess.PIPE,
+                         stderr=subprocess.STDOUT, text=True, env=env, bufsize=1)
+    tail = []
+    for line in p.stdout:
+        line = line.rstrip()
+        tail = (tail + [line])[-10:]
+        print("   | " + line if not line.startswith(("pmstatus:", "dlstatus:")) else line, flush=True)
+    rc = p.wait()
+    return subprocess.CompletedProcess(args, rc, "", "\n".join(tail))
+
+
+def say(msg=""):
+    print(msg, flush=True)
+
+
+def run(cmd, **kw):
+    return subprocess.run(cmd, capture_output=True, text=True, **kw)
+
+
+def ask(question, default=False, assume=None):
+    if assume is not None:
+        return assume
+    if not sys.stdin.isatty():
+        return default
+    a = input("%s [%s] " % (question, "Y/n" if default else "y/N")).strip().lower()
+    return default if not a else a.startswith("y")
+
+
+# ------------------------------------------------------------------ package bookkeeping
+def history_packages():
+    """Packages installed by PairDesk transactions, from apt's history logs."""
+    found = set()
+    for f in sorted(glob.glob("/var/log/apt/history.log*")):
+        try:
+            op = gzip.open if f.endswith(".gz") else open
+            with op(f, "rt", errors="replace") as fh:
+                text = fh.read()
+        except OSError:
+            continue
+        for block in re.split(r"\n\s*\n", text):
+            cl = re.search(r"^Commandline: (.*)$", block, re.M)
+            if not cl or not OURS.search(cl.group(1)):
+                continue
+            for m in re.finditer(r"^Install: (.*)$", block, re.M):
+                for item in re.split(r"\),\s*", m.group(1)):
+                    name = item.strip().split(" ", 1)[0].split(":", 1)[0]
+                    if name:
+                        found.add(name)
+    return found
+
+
+def recorded_packages(path=RECORD):
+    try:
+        with open(path) as f:
+            return {l.strip() for l in f if l.strip() and not l.startswith("#")}
+    except OSError:
+        return set()
+
+
+def installed():
+    r = run(["dpkg-query", "-W", "-f=${Package} ${db:Status-Abbrev}\n"])
+    return {l.split()[0] for l in r.stdout.splitlines() if len(l.split()) > 1 and l.split()[1].startswith("ii")}
+
+
+def simulate(args):
+    """Packages apt would remove for these arguments (simulation only)."""
+    r = run(["apt-get", "-s"] + args)
+    return {l.split()[1] for l in r.stdout.splitlines() if l.startswith(("Purg ", "Remv "))}
+
+
+# ------------------------------------------------------------------ system cleanup
+def homes():
+    seen = []
+    for p in pwd.getpwall():
+        if (p.pw_uid >= 1000 or p.pw_uid == 0) and os.path.isdir(p.pw_dir) and p.pw_dir not in seen:
+            seen.append((p.pw_name, p.pw_dir))
+    return seen
+
+
+def strip_keys(home):
+    p = os.path.join(home, ".ssh", "authorized_keys")
+    try:
+        lines = open(p).read().splitlines()
+    except OSError:
+        return 0
+    keep = [l for l in lines if not re.search(r"pairdesk-(peer|rev)=\S+\s*$", l)]
+    if len(keep) != len(lines):
+        st = os.stat(p)
+        with open(p, "w") as f:
+            f.write("\n".join(keep) + ("\n" if keep else ""))
+        os.chown(p, st.st_uid, st.st_gid)
+        os.chmod(p, 0o600)
+    return len(lines) - len(keep)
+
+
+def undo_system():
+    if os.path.exists(HELPER):
+        users = [os.path.basename(f)[len("pairdesk-"):] for f in glob.glob("/etc/sudoers.d/pairdesk-*")]
+        env = {k: v for k, v in os.environ.items() if k not in ("SUDO_USER", "PKEXEC_UID")}
+        for u in users:
+            run([HELPER, "unsetup", u], env=env)
+        if not users:     # never set up, but Server mode may have changed things
+            run([HELPER, "server-disable"], env=env)
+            run([HELPER, "firewall-remove"], env=env)
+    for unit in ("pairdesk-usbipd.service", "pairdesk-firewall.service"):
+        run(["systemctl", "disable", "--now", unit])
+    if shutil.which("nft"):
+        run(["nft", "delete", "table", "inet", "pairdesk"])
+    run(["pkill", "-f", "pairdesk-remote hold-awake"])
+    # 2.0: each user's link service (PairDesk's own port)
+    run(["pkill", "-f", "/usr/bin/pairdesk link-run"])
+    for user, h in homes():
+        d = os.path.join(h, ".config", "pairdesk")
+        try:
+            pid = int(open(os.path.join(d, "link", "sshd.pid")).read().strip())
+            os.kill(pid, 15)
+        except (OSError, ValueError):
+            pass
+        w = os.path.join(h, ".config", "systemd", "user", "default.target.wants", "pairdesk-link.service")
+        if os.path.islink(w) or os.path.exists(w):
+            os.unlink(w)
+        try:
+            import json
+            if json.load(open(os.path.join(d, "config.json"))).get("linger_by_pairdesk"):
+                run(["loginctl", "disable-linger", user])
+        except (OSError, ValueError):
+            pass
+    # shared-folder connections
+    try:
+        for line in open("/proc/mounts"):
+            dev, mp, typ = line.split()[:3]
+            mp = mp.replace("\\040", " ")
+            if typ == "fuse.sshfs" and "/PairDesk/" in mp:
+                run(["umount", "-l", mp])
+    except OSError:
+        pass
+    n = sum(strip_keys(h) for _, h in homes())
+    for f in glob.glob("/etc/sudoers.d/pairdesk-*") + ["/etc/modules-load.d/pairdesk.conf",
+                                                          "/etc/avahi/services/pairdesk.service"]:
+        if os.path.exists(f):
+            os.unlink(f)
+    return n
+
+
+def remove_settings():
+    removed = []
+    for _, h in homes():
+        for p in [os.path.join(h, ".config", "pairdesk"), os.path.join(h, ".cache", "pairdesk")] + \
+                glob.glob(os.path.join(h, ".local/share/applications/pairdesk-connect-*.desktop")) + \
+                glob.glob(os.path.join(h, ".config/autostart/pairdesk-connect-*.desktop")):
+            if os.path.isdir(p):
+                shutil.rmtree(p, ignore_errors=True)
+                removed.append(p)
+            elif os.path.exists(p):
+                os.unlink(p)
+                removed.append(p)
+        mr = os.path.join(h, "PairDesk")        # mount points of remote folders: only if empty
+        if os.path.isdir(mr):
+            for d in os.listdir(mr):
+                try:
+                    os.rmdir(os.path.join(mr, d))
+                except OSError:
+                    pass
+            try:
+                os.rmdir(mr)
+                removed.append(mr)
+            except OSError:
+                pass
+    return removed
+
+
+# ------------------------------------------------------------------ main
+def main():
+    args = set(sys.argv[1:])
+    if args & {"-h", "--help"}:
+        say(__doc__)
+        return 0
+    dry = "--dry-run" in args
+    yes = True if "--yes" in args else None
+    if os.geteuid() != 0 and not dry:
+        say("Run it with sudo:  sudo %s" % " ".join(sys.argv))
+        return 1
+
+    ours = (history_packages() | recorded_packages()) - NEVER
+    # read now: removing the package deletes /var/lib/pairdesk
+    requested = recorded_packages(REQUESTED)      # marked "manual" on purpose, so named explicitly
+    have = installed()
+    ours_installed = sorted((ours & have) - {"pairdesk"})
+    say("PairDesk uninstaller")
+    say("=" * 22)
+    say("PairDesk package: %s" % ("installed" if "pairdesk" in have else "not installed"))
+    if ours_installed:
+        say("Packages PairDesk brought in that are still installed: " + ", ".join(ours_installed))
+
+    # what would go: everything apt would autoremove after PairDesk is gone, limited to ours
+    plan = simulate(["purge", "pairdesk"]) if "pairdesk" in have else set()
+    extra = plan - {"pairdesk"} - ours
+    if extra:
+        say("\nStopping: removing PairDesk would also remove: " + ", ".join(sorted(extra)))
+        say("Nothing was changed.")
+        return 2
+    if dry:
+        say("\nDry run: nothing changed. Run without --dry-run to remove.")
+        return 0
+    if not ask("\nRemove PairDesk from the current computer?", True, yes):
+        say("Nothing was changed.")
+        return 0
+
+    say("\n1. Giving USB devices back and undoing setup ...")
+    n = undo_system()
+    say("   done (%d SSH key line(s) for PairDesk removed)" % n)
+
+    if "pairdesk" in have:
+        say("2. Removing the PairDesk package ...")
+        r = apt(["purge", "-y", "pairdesk"])
+        if r.returncode != 0:
+            say("   apt failed: " + (r.stderr.strip().splitlines() or ["?"])[-1])
+            return 3
+    else:
+        say("2. PairDesk package already removed.")
+
+    say("3. Removing packages PairDesk brought in that nothing else needs ...")
+    # add unused packages that look like PairDesk's dependencies (for installs apt's history doesn't name)
+    ours |= {p for p in simulate(["autoremove", "--purge"]) if DEP_RE.match(p)}
+
+    keep_ssh = "--keep-ssh-server" in args
+    removed = []
+    asked_ssh = False
+    for _ in range(6):     # repeat: removing one package can free its own parts
+        cand = simulate(["autoremove", "--purge"]) & ours
+        # xrdp from "Install it for me" was installed by hand-style apt-get: include it if it's ours
+        cand |= {p for p in ("xrdp", "pipewire-module-xrdp", "pulseaudio-module-xrdp") if p in ours} & installed()
+        cand |= requested & installed()
+        if "openssh-server" in cand and not asked_ssh:
+            asked_ssh = True
+            if keep_ssh or not ask("   openssh-server was installed by PairDesk. It lets other computers log in "
+                                   "with SSH. Remove it too?", False, None if yes is None else not keep_ssh):
+                keep_ssh = True
+        if keep_ssh:
+            cand.discard("openssh-server")
+            cand.discard("openssh-sftp-server")
+        cand -= set(removed)
+        if not cand:
+            break
+        others = simulate(["purge"] + sorted(cand)) - ours
+        if others:     # never take anything that isn't ours: drop the packages that would pull others along
+            cand = {p for p in cand if not (simulate(["purge", p]) - ours)}
+            if not cand:
+                say("   stopped: removing more would also remove " + ", ".join(sorted(others)))
+                break
+        if not removed and yes is None:
+            say("   " + "\n   ".join("%s%s" % (p, "  (%s)" % ABOUT[p] if p in ABOUT else "") for p in sorted(cand)))
+            if not ask("   Remove these?", True):
+                break
+        r = apt(["purge", "-y"] + sorted(cand))
+        if r.returncode != 0:
+            say("   apt failed: " + (r.stderr.strip().splitlines() or ["?"])[-1])
+            break
+        removed += sorted(cand)
+    # tools marked "installed by you" (e.g. installed via the Software app): offer each one if unused
+    for t in TOOLS:
+        if t in installed() and t not in removed and not (simulate(["purge", t]) - {t} - ours):
+            if ask("   %s (%s) is still installed and nothing else uses it. PairDesk may have installed "
+                   "it. Remove it?" % (t, ABOUT.get(t, "tool")), False,
+                   True if "--remove-tools" in args else (False if yes else None)):
+                r = apt(["purge", "-y", t])
+                if r.returncode == 0:
+                    removed.append(t)
+                    ours.add(t)
+                    for _ in range(4):    # and its now-unused libraries
+                        more = simulate(["autoremove", "--purge"]) & (ours | {p for p in simulate(
+                            ["autoremove", "--purge"]) if DEP_RE.match(p)})
+                        more -= set(removed)
+                        if not more or apt(["purge", "-y"] + sorted(more)).returncode != 0:
+                            break
+                        removed += sorted(more)
+                        ours |= more
+    say("   removed: " + (", ".join(removed) if removed else "nothing extra"))
+    kept = sorted((ours & installed()) - {"pairdesk"})
+    if kept:
+        say("   kept (you installed them yourself, or other software uses them): " + ", ".join(kept))
+
+    say("4. Settings")
+    if ask("   Also delete PairDesk settings for all users (pairings, keys, shortcuts)? "
+           "Files in your shared folders are kept.", False,
+           True if "--remove-settings" in args else (False if "--keep-settings" in args or yes else None)):
+        for p in remove_settings():
+            say("   deleted " + p)
+    else:
+        say("   kept (~/.config/pairdesk). Delete it any time.")
+    if os.path.isdir("/var/lib/pairdesk"):
+        shutil.rmtree("/var/lib/pairdesk", ignore_errors=True)
+    shutil.rmtree("/etc/pairdesk", ignore_errors=True)
+    say("\nPairDesk is removed. Shared folders (\"PairDesk Shared\") were left untouched.")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

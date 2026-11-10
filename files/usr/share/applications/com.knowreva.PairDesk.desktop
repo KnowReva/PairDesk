@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=PairDesk
+GenericName=Remote Desktop
+Comment=Use another computer's desktop, with your USB devices, folders and sound
+Exec=pairdesk
+Icon=pairdesk
+Terminal=false
+StartupNotify=true
+StartupWMClass=pairdesk
+Categories=Network;RemoteAccess;GTK;
+Keywords=remote;desktop;rdp;usb;yubikey;webcam;share;vnc;

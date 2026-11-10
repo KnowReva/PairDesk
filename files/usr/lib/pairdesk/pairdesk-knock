@@ -1,0 +1,40 @@
+#!/usr/bin/python3 -I
+"""PairDesk link: sshd's AuthorizedKeysCommand. A computer that isn't paired yet knocks with a fresh
+random key of its own (a new one for every pairing attempt). Any such key is let in to the pairing gate
+only: it can ask for a one-time code to be shown on this screen, and pair if it proves it knows that code.
+Paired computers are matched by the authorized_keys file before this runs."""
+
+import os
+import pwd
+import re
+import sys
+
+
+def main():
+    if len(sys.argv) != 4:
+        return
+    user, ktype, key = sys.argv[1:]
+    if ktype != "ssh-ed25519" or not re.match(r"^[A-Za-z0-9+/]{60,80}={0,2}$", key):
+        return
+    try:
+        pw = pwd.getpwnam(user)
+    except KeyError:
+        return
+    if pw.pw_uid != os.getuid():
+        return
+    os.environ["HOME"] = pw.pw_dir
+    sys.path.insert(0, "/usr/lib/pairdesk")
+    import dbcore as C
+    c = C.load_config()
+    if c.get("mode") not in ("server", "both"):
+        return
+    if c.get("pair_only_on_press") and not C.pairing_open():
+        return          # pairing requests are refused until someone presses "Pair a new computer" here
+    print('command="/usr/bin/pairdesk-remote pair-gate",restrict %s %s pairdesk-knock' % (ktype, key))
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception:      # noqa: BLE001 - never let a knock break the link: just don't let it in
+        pass

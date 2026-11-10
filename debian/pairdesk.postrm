@@ -1,0 +1,42 @@
+#!/bin/sh
+set -e
+if [ "$1" = "remove" ] || [ "$1" = "purge" ]; then
+    rm -f /etc/sudoers.d/pairdesk-* /etc/modules-load.d/pairdesk.conf /etc/udev/rules.d/70-pairdesk-imported.rules /etc/udev/rules.d/99-pairdesk-imported.rules
+    # sign-in screen "don't suspend" setting from "pairdesk headless-setup"
+    if [ -f /etc/dconf/db/gdm.d/90-pairdesk-nosleep ]; then
+        rm -f /etc/dconf/db/gdm.d/90-pairdesk-nosleep
+        if [ -f /etc/dconf/profile/gdm ] && head -n1 /etc/dconf/profile/gdm | grep -q '^# Added by PairDesk'; then
+            rm -f /etc/dconf/profile/gdm
+        fi
+        dconf update >/dev/null 2>&1 || true
+    fi
+    systemctl daemon-reload >/dev/null 2>&1 || true
+    # "apt purge" calls this with "remove" first, then "purge": show the tip once
+    if [ "$1" = "remove" ] && [ -s /var/lib/pairdesk/requested.list ]; then
+        left=""
+        # shellcheck disable=SC2013
+        for p in $(sort -u /var/lib/pairdesk/requested.list); do
+            if dpkg-query -W -f='${db:Status-Abbrev}' "$p" 2>/dev/null | grep -q '^ii'; then left="$left $p"; fi
+        done
+        if [ -n "$left" ]; then
+            echo "PairDesk add-ons are still installed:$left"
+            echo "To remove them too:  sudo apt purge$left && sudo apt autoremove --purge"
+            echo "(Next time, use Settings > Uninstall PairDesk or sudo pairdesk-uninstall: it does this for you.)"
+        fi
+    fi
+fi
+if [ "$1" = "purge" ]; then
+    # PairDesk's key lines in authorized_keys only work with PairDesk: remove them
+    for h in /root /home/*; do
+        k="$h/.ssh/authorized_keys"
+        [ -f "$k" ] || continue
+        if grep -Eq 'pairdesk-(peer|rev)=[^ ]+ *$' "$k"; then
+            sed -i -E '/pairdesk-(peer|rev)=[^ ]+ *$/d' "$k"
+        fi
+    done
+    rm -rf /etc/pairdesk /var/lib/pairdesk
+fi
+
+#DEBHELPER#
+
+exit 0

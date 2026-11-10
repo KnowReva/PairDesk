@@ -1,0 +1,21 @@
+#!/usr/bin/make -f
+
+export PYTHONDONTWRITEBYTECODE=1
+
+%:
+	dh $@
+
+override_dh_auto_test:
+ifeq (,$(filter nocheck,$(DEB_BUILD_OPTIONS)))
+	python3 -W ignore -m unittest tests/test_core.py
+endif
+
+# The USB and firewall services are enabled only by "pairdesk setup", never at install time.
+override_dh_installsystemd:
+	dh_installsystemd --no-enable --no-start
+
+# The per-user link service is started by PairDesk itself when remote access is turned on.
+override_dh_installsystemduser:
+
+override_dh_installchangelogs:
+	dh_installchangelogs CHANGELOG.md

@@ -1,0 +1,49 @@
+#!/bin/sh
+set -e
+if [ "$1" = "configure" ]; then
+    # PairDesk was called DeskBridge until 2.4: keep its record of installed add-ons (so uninstalling
+    # PairDesk still removes them), then bring each user's settings and pairings over once,
+    # and reopen the remote-access port for users who had it on (computers without a monitor keep working).
+    if [ -d /var/lib/deskbridge ] && [ ! -e /var/lib/pairdesk/installed.list ]; then
+        mkdir -p /var/lib/pairdesk
+        for f in installed.list requested.list; do
+            if [ -f "/var/lib/deskbridge/$f" ]; then cp -p "/var/lib/deskbridge/$f" "/var/lib/pairdesk/$f"; fi
+        done
+    fi
+    for h in /root /home/*; do
+        [ -f "$h/.config/deskbridge/config.json" ] || continue
+        [ -e "$h/.config/pairdesk/config.json" ] && continue
+        u=$(stat -c %U "$h") || continue
+        uid=$(id -u "$u" 2>/dev/null) || continue
+        if [ -d "/run/user/$uid" ]; then
+            runuser -u "$u" -- env HOME="$h" XDG_RUNTIME_DIR="/run/user/$uid" pairdesk migrate >/dev/null 2>&1 || true
+        else
+            runuser -u "$u" -- env HOME="$h" pairdesk migrate >/dev/null 2>&1 || true
+        fi
+    done
+    # a running PairDesk link reloads its settings (open connections stay up)
+    for d in /home/*/.config/pairdesk/link /root/.config/pairdesk/link; do
+        [ -f "$d/sshd.pid" ] || continue
+        h=${d%/.config/pairdesk/link}
+        u=$(stat -c %U "$h") || continue
+        runuser -u "$u" -- env HOME="$h" pairdesk link-refresh >/dev/null 2>&1 || true
+    done
+    # restart services for users who already ran setup (upgrade)
+    if ls /etc/sudoers.d/pairdesk-* >/dev/null 2>&1; then
+        # devices sent from other computers: usable in remote sessions too (added in 2.7.10)
+        /usr/libexec/pairdesk/root-helper udev-rule >/dev/null 2>&1 || true
+        if [ -d /run/systemd/system ]; then
+            systemctl daemon-reload >/dev/null 2>&1 || true
+            # setup enabled these: make sure they run the new version (also when they had stopped)
+            for s in pairdesk-firewall.service pairdesk-usbipd.service; do
+                if systemctl is-enabled --quiet "$s" 2>/dev/null; then
+                    deb-systemd-invoke restart "$s" >/dev/null 2>&1 || true
+                fi
+            done
+        fi
+    fi
+fi
+
+#DEBHELPER#
+
+exit 0

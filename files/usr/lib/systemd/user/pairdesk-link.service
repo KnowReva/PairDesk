@@ -1,0 +1,12 @@
+[Unit]
+Documentation=man:pairdesk(1)
+Description=PairDesk link service (lets paired computers connect while remote access is on)
+After=network-online.target
+
+[Service]
+ExecStart=/usr/bin/pairdesk link-run
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target

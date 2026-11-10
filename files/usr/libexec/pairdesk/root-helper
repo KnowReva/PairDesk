@@ -1,0 +1,722 @@
+#!/usr/bin/python3
+"""PairDesk privileged helper. Runs as root via sudo (after setup) or pkexec.
+Every argument is validated; only these fixed operations exist."""
+
+import glob
+import json
+import os
+import pwd
+import re
+import shutil
+import stat
+import subprocess
+import sys
+
+SYS_CONF = "/etc/pairdesk/system.json"
+AVAHI_FILE = "/etc/avahi/services/pairdesk.service"
+SUDOERS = "/etc/sudoers.d/pairdesk-%s"
+MODULES_CONF = "/etc/modules-load.d/pairdesk.conf"
+# 99-: after the system's own "uaccess" rule (73-seat-late), which otherwise takes the access away again
+UDEV_RULE = "/etc/udev/rules.d/99-pairdesk-imported.rules"
+OLD_UDEV_RULE = "/etc/udev/rules.d/70-pairdesk-imported.rules"
+BUSID_RE = re.compile(r"^\d+-\d+(\.\d+)*$")
+USER_RE = re.compile(r"^[a-z_][a-z0-9_.-]{0,31}$")
+GRD_DIR = "/var/lib/gnome-remote-desktop/.local/share/gnome-remote-desktop"
+
+
+def out(obj):
+    print(json.dumps(obj))
+    sys.exit(0)
+
+
+def die(msg, code=3):
+    sys.stderr.write(msg.rstrip() + "\n")
+    sys.exit(code)
+
+
+def run(cmd, check=True, **kw):
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, **kw)
+    except FileNotFoundError:
+        r = subprocess.CompletedProcess(cmd, 127, "", "%s: not installed" % cmd[0])
+    if check and r.returncode != 0:
+        die("%s: %s" % (os.path.basename(cmd[0]), (r.stderr or r.stdout).strip() or "failed"))
+    return r
+
+
+def run_stream(cmd, env=None, timeout=1800):
+    """Run apt with its output and progress (APT::Status-Fd) passed live to stderr, where the
+    app shows them; returns (returncode, last lines)."""
+    cmd = cmd[:1] + ["-o", "APT::Status-Fd=2"] + cmd[1:] if cmd[0] == "apt-get" else cmd
+    tail = []
+    try:
+        p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=env, bufsize=1)
+    except FileNotFoundError:
+        return 127, ["%s: not installed" % cmd[0]]
+    for line in p.stdout:
+        sys.stderr.write(line)
+        sys.stderr.flush()
+        tail = (tail + [line.rstrip()])[-20:]
+    return p.wait(timeout=timeout), tail
+
+
+def step(msg):
+    sys.stderr.write("step:%s\n" % msg)
+    sys.stderr.flush()
+
+
+def load_sys():
+    try:
+        with open(SYS_CONF) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {"server_on": False, "backend": None, "lock_rdp": True, "we_enabled": []}
+
+
+def save_sys(s):
+    os.makedirs(os.path.dirname(SYS_CONF), exist_ok=True)
+    with open(SYS_CONF + ".tmp", "w") as f:
+        json.dump(s, f, indent=2)
+    os.chmod(SYS_CONF + ".tmp", 0o644)   # read by pairdesk-remote for quick status
+    os.replace(SYS_CONF + ".tmp", SYS_CONF)
+
+
+def enable_wol():
+    """Turn on Wake-on-LAN (magic packet) for wired network cards. Best effort."""
+    done = []
+    if shutil.which("nmcli"):
+        r = run(["nmcli", "-t", "-f", "NAME,TYPE", "connection", "show"], check=False)
+        for line in r.stdout.splitlines():
+            name, _, typ = line.rpartition(":")
+            if typ == "802-3-ethernet" and name:
+                name = name.replace("\\:", ":")
+                if run(["nmcli", "connection", "modify", name, "802-3-ethernet.wake-on-lan", "magic"],
+                       check=False).returncode == 0:
+                    done.append(name)
+    if shutil.which("ethtool"):
+        for dev in os.listdir("/sys/class/net"):
+            if dev != "lo" and not os.path.exists("/sys/class/net/%s/wireless" % dev) \
+                    and os.path.exists("/sys/class/net/%s/device" % dev):
+                if run(["ethtool", "-s", dev, "wol", "g"], check=False).returncode == 0 and dev not in done:
+                    done.append(dev)
+    return done
+
+
+def busid(a):
+    if not BUSID_RE.match(a or ""):
+        die("bad USB bus id", 2)
+    return a
+
+
+def tcp_port(a):
+    try:
+        p = int(a)
+    except (TypeError, ValueError):
+        die("bad port", 2)
+    if not 1024 <= p <= 65535:
+        die("bad port", 2)
+    return p
+
+
+def find_tool(name):
+    for cand in [shutil.which(name), "/usr/sbin/" + name, "/usr/bin/" + name]:
+        if cand and os.path.exists(cand):
+            # Ubuntu wrapper needs the kernel-specific package; prefer a real binary if present
+            if open(cand, "rb").read(2) != b"#!":
+                return cand
+            real = sorted(glob.glob("/usr/lib/linux-tools/%s/%s" % (os.uname().release, name)))
+            if real:
+                return real[0]
+            return cand
+    real = sorted(glob.glob("/usr/lib/linux-tools/*/" + name))
+    return real[-1] if real else None
+
+
+def usbip():
+    t = find_tool("usbip")
+    if not t:
+        die("usbip is not installed (Debian: apt install usbip; Ubuntu: apt install linux-tools-generic)")
+    return t
+
+
+def svc_active(name):
+    return run(["systemctl", "is-active", "--quiet", name], check=False).returncode == 0
+
+
+def svc(action, name):
+    try:
+        return run(["systemctl", action, "--now", name], check=False, timeout=120).returncode == 0
+    except subprocess.TimeoutExpired:
+        sys.stderr.write("%s didn't start within 2 minutes; continuing\n" % name)
+        return False
+
+
+def port_listening(port):
+    hexp = ":%04X" % port
+    for fn in ("/proc/net/tcp", "/proc/net/tcp6"):
+        try:
+            for line in open(fn).readlines()[1:]:
+                p = line.split()
+                if p[1].endswith(hexp) and p[3] == "0A":
+                    return True
+        except OSError:
+            pass
+    return False
+
+
+def ssh_unit():
+    for u in ("ssh", "sshd"):
+        if run(["systemctl", "cat", u + ".service"], check=False).returncode == 0:
+            return u
+    return None
+
+
+# ------------------------------------------------------------------ firewall
+def firewall_apply():
+    s = load_sys()
+    ports = [3240] + ([3389] if s.get("lock_rdp", True) else [])
+    if shutil.which("nft"):
+        run(["nft", "delete", "table", "inet", "pairdesk"], check=False)
+        rules = ("table inet pairdesk {\n chain input {\n  type filter hook input priority -10; policy accept;\n"
+                 '  iif "lo" accept\n  tcp dport { %s } drop\n }\n}\n') % ", ".join(map(str, ports))
+        run(["nft", "-f", "-"], input=rules)
+        return "nft"
+    ok = False
+    for ipt in ("iptables", "ip6tables"):
+        if not shutil.which(ipt):
+            continue
+        run([ipt, "-N", "PAIRDESK"], check=False)
+        run([ipt, "-F", "PAIRDESK"])
+        run([ipt, "-A", "PAIRDESK", "-i", "lo", "-j", "RETURN"])
+        for p in ports:
+            run([ipt, "-A", "PAIRDESK", "-p", "tcp", "--dport", str(p), "-j", "DROP"])
+        if run([ipt, "-C", "INPUT", "-j", "PAIRDESK"], check=False).returncode != 0:
+            run([ipt, "-I", "INPUT", "1", "-j", "PAIRDESK"])
+        ok = True
+    return "iptables" if ok else "none"
+
+
+def firewall_active():
+    if shutil.which("nft"):
+        return run(["nft", "list", "table", "inet", "pairdesk"], check=False).returncode == 0
+    if shutil.which("iptables"):
+        return run(["iptables", "-C", "INPUT", "-j", "PAIRDESK"], check=False).returncode == 0
+    return False
+
+
+# ------------------------------------------------------------------ desktop server
+def gnome_available():
+    return bool(shutil.which("grdctl")) and run(
+        ["systemctl", "cat", "gnome-remote-desktop.service"], check=False).returncode == 0
+
+
+def xrdp_available():
+    return run(["systemctl", "cat", "xrdp.service"], check=False).returncode == 0
+
+
+def pick_backend(want):
+    if want == "none":
+        return None
+    if want in ("gnome", "auto") and gnome_available():
+        return "gnome"
+    if want in ("xrdp", "auto") and xrdp_available():
+        return "xrdp"
+    if want == "gnome":
+        die("GNOME Remote Desktop is not installed (apt install gnome-remote-desktop).")
+    if want == "xrdp":
+        die("xrdp is not installed (sudo apt install xrdp pipewire-module-xrdp).")
+    return None   # USB and folders still work; desktop needs a server installed
+
+
+def gnome_enable(user, password):
+    os.makedirs(GRD_DIR, exist_ok=True)
+    key, crt = os.path.join(GRD_DIR, "rdp-tls.key"), os.path.join(GRD_DIR, "rdp-tls.crt")
+    if not os.path.exists(crt):
+        run(["openssl", "req", "-new", "-newkey", "rsa:3072", "-days", "3650", "-nodes", "-x509",
+             "-subj", "/CN=pairdesk", "-keyout", key, "-out", crt])
+    run(["chown", "-R", "gnome-remote-desktop:gnome-remote-desktop", "/var/lib/gnome-remote-desktop"],
+        check=False)
+    run(["grdctl", "--system", "rdp", "set-tls-key", key])
+    run(["grdctl", "--system", "rdp", "set-tls-cert", crt])
+    run(["grdctl", "--system", "rdp", "set-credentials", user, password])
+    run(["grdctl", "--system", "rdp", "enable"])
+    if not svc("enable", "gnome-remote-desktop.service"):
+        die("could not start gnome-remote-desktop; turn on Settings > System > Remote Desktop > Remote Login")
+
+
+def server_enable(want, user):
+    s = load_sys()
+    backend = pick_backend(want)
+    we = set(s.get("we_enabled", []))
+    if backend is None:
+        pass
+    elif backend == "gnome":
+        req = json.loads(sys.stdin.read() or "{}")
+        if not req.get("password"):
+            if not port_listening(3389):
+                backend = None     # accept connections now; the desktop is set up separately
+        else:
+            if not svc_active("gnome-remote-desktop"):
+                we.add("gnome-remote-desktop")
+            if svc_active("xrdp"):           # both can't use the desktop port: GNOME takes over
+                svc("disable", "xrdp")
+            gnome_enable(req.get("user") or user, req["password"])
+    else:
+        if not svc_active("xrdp"):
+            we.add("xrdp")
+        run(["adduser", "xrdp", "ssl-cert"], check=False)
+        if shutil.which("grdctl"):         # free the desktop port from GNOME Remote Login
+            run(["grdctl", "--system", "rdp", "disable"], check=False)
+        if not svc("enable", "xrdp"):
+            die("could not start xrdp")
+    u = ssh_unit()
+    if u:
+        svc("enable", u)
+    if False:   # 2.0: each user's link service announces itself (avahi-publish)
+        with open(AVAHI_FILE, "w") as f:
+            f.write('<?xml version="1.0" standalone=\'no\'?>\n<!DOCTYPE service-group SYSTEM "avahi-service.dtd">\n'
+                    '<service-group>\n  <name replace-wildcards="yes">PairDesk on %h</name>\n'
+                    '  <service>\n    <type>_pairdesk._tcp</type>\n    <port>22</port>\n'
+                    '  </service>\n</service-group>\n')
+    s.update(server_on=True, backend=backend, we_enabled=sorted(we), wol=enable_wol())
+    save_sys(s)
+    firewall_apply()
+    rep = {"backend": backend, "wol": s["wol"]}
+    if backend is None and not port_listening(3389):
+        rep["needs_desktop"] = "gnome" if gnome_available() else ("xrdp" if xrdp_available() else "install")
+    return rep
+
+
+RECORD = "/var/lib/pairdesk/installed.list"
+REQUESTED = "/var/lib/pairdesk/requested.list"
+
+
+def dpkg_installed():
+    r = run(["dpkg-query", "-W", "-f=${Package} ${db:Status-Abbrev}\n"], check=False)
+    return {l.split()[0] for l in r.stdout.splitlines() if len(l.split()) > 1 and l.split()[1].startswith("ii")}
+
+
+def has_candidate(pkg):
+    r = run(["apt-cache", "policy", pkg], check=False)
+    m = re.search(r"Candidate: (\S+)", r.stdout)
+    return bool(m) and m.group(1) != "(none)"
+
+
+def install_feature(name):
+    """Install one optional feature. Only missing packages are installed (nothing you
+    already have is touched); they are marked automatic and recorded, so uninstalling
+    PairDesk removes exactly these again."""
+    sys.path.insert(0, "/usr/lib/pairdesk")
+    import dbcore
+    if name not in dbcore.FEATURES:
+        die("unknown feature", 2)
+    have = dpkg_installed()
+    want, updated = [], False
+    for group in dbcore.FEATURES[name]["packages"]:
+        if any(p in have for p in group):
+            continue
+        if group[0] == "sudo" and shutil.which("sudo"):
+            continue        # any sudo will do (Ubuntu 26.04 uses sudo-rs)
+        if group[0] == "v4l2loopback-dkms" and dbcore.loopback_available():
+            continue        # the kernel already has the virtual camera driver
+        pick = next((p for p in group if has_candidate(p)), None)
+        if pick is None and not updated:
+            step("Updating the package list")
+            run_stream(["apt-get", "update"], timeout=600)
+            updated = True
+            pick = next((p for p in group if has_candidate(p)), None)
+        if pick is None:
+            if group[0] == "sudo":
+                continue
+            die("%s is not available from your software sources." % " or ".join(group))
+        want.append(pick)
+    if not want:
+        return {"installed": []}
+    env = dict(os.environ, DEBIAN_FRONTEND="noninteractive")
+    step("Installing %s" % ", ".join(want))
+    cmd = ["apt-get", "install", "-y", "--no-install-recommends", "-o", "PairDesk::Feature=" + name] + want
+    rc, tail = run_stream(cmd, env=env)
+    text = "\n".join(tail)
+    if rc != 0 and ("--fix-broken" in text or "Unmet dependencies" in text or "dpkg --configure -a" in text
+                    or "dpkg was interrupted" in text):
+        # An earlier install (PairDesk's or anyone's) was left half done: finish it, then try once more.
+        step("Finishing an earlier unfinished software installation")
+        run_stream(["dpkg", "--configure", "-a"], env=env)
+        run_stream(["apt-get", "install", "-f", "-y"], env=env)
+        step("Installing %s" % ", ".join(want))
+        rc, tail = run_stream(cmd, env=env)
+    if rc != 0:
+        msg = [l for l in tail if l.startswith(("E:", "W:")) and "Status-Fd" not in l] or tail or ["apt error"]
+        die("Installing %s failed: %s" % (", ".join(want), msg[-1]))
+    new = sorted(dpkg_installed() - have)
+    # The add-ons stay marked as normally installed, so an unrelated "apt autoremove" never takes them
+    # while PairDesk uses them. Instead PairDesk records exactly what it added (and which of those
+    # were the requested add-ons); its uninstaller removes those again.
+    os.makedirs(os.path.dirname(RECORD), exist_ok=True)
+    with open(RECORD, "a") as f:
+        f.write("".join(p + "\n" for p in new))
+    with open(REQUESTED, "a") as f:
+        f.write("".join(p + "\n" for p in want if p in new))
+    for f in (RECORD, REQUESTED):
+        os.chmod(f, 0o644)          # the app shows which add-ons PairDesk added
+    if name == "accept" and "openssh-server" in new:
+        # PairDesk only needs the program; keep the system's own SSH login closed
+        for unit in ("ssh.socket", "ssh.service", "sshd.service"):
+            run(["systemctl", "disable", "--now", unit], check=False)
+    if name == "usb":
+        for m in ("usbip-host", "vhci-hcd"):
+            run(["modprobe", m], check=False)
+    return {"installed": new}
+
+
+def install_xrdp(user):
+    """Install xrdp with sound support, then use it as the desktop server."""
+    rep = install_feature("xrdp")
+    rep.update(server_enable("xrdp", user))
+    return rep
+
+
+def server_disable():
+    s = load_sys()
+    for name in s.get("we_enabled", []):
+        if name == "gnome-remote-desktop":
+            run(["grdctl", "--system", "rdp", "disable"], check=False)
+        svc("disable", name)
+    if os.path.exists(AVAHI_FILE):
+        os.unlink(AVAHI_FILE)
+    s.update(server_on=False, we_enabled=[])
+    save_sys(s)
+    return {"ok": True}
+
+
+# ------------------------------------------------------------------ setup/status
+def camera_device():
+    """The virtual camera that cameras sent from paired computers appear as ("PairDesk camera"), loaded
+    when needed, and usable by the PairDesk user who asked."""
+    user = os.environ.get("SUDO_USER") or (
+        pwd.getpwuid(int(os.environ["PKEXEC_UID"])).pw_name if os.environ.get("PKEXEC_UID") else None)
+    if not user or not USER_RE.match(user):
+        die("unknown user", 2)
+
+    def find():
+        for d in glob.glob("/sys/class/video4linux/video*"):
+            try:
+                if open(os.path.join(d, "name")).read().strip().startswith("PairDesk camera"):
+                    return "/dev/" + os.path.basename(d)
+            except OSError:
+                pass
+        return None
+    dev = find()
+    if not dev:
+        if os.path.isdir("/sys/module/v4l2loopback"):
+            ctl = shutil.which("v4l2loopback-ctl")
+            if not ctl:
+                die("The virtual camera driver is already in use by another program here (e.g. OBS).")
+            run([ctl, "add", "-n", "PairDesk camera", "--exclusive-caps=1"], check=False, timeout=30)
+        else:
+            r = run(["modprobe", "v4l2loopback", "devices=1", "exclusive_caps=1", 'card_label="PairDesk camera"'],
+                    check=False, timeout=60)
+            if r.returncode != 0:
+                err = (r.stderr or r.stdout).strip()
+                if "Key was rejected" in err or "Operation not permitted" in err:
+                    die("Secure Boot blocked the virtual camera driver (v4l2loopback). Allow it once with "
+                        "'sudo mokutil --import /var/lib/shim-signed/mok/MOK.der' and a restart, or turn Secure "
+                        "Boot off.")
+                die("The virtual camera driver (v4l2loopback) didn't load: " + (err or "modprobe failed"))
+        for _ in range(30):
+            dev = find()
+            if dev:
+                break
+            import time
+            time.sleep(0.1)
+    if not dev:
+        die("The virtual camera didn't appear.")
+    setfacl = shutil.which("setfacl")
+    if setfacl:
+        run([setfacl, "-m", "u:%s:rw" % user, dev], check=False)
+    return {"device": dev}
+
+
+def write_udev_rule():
+    """Devices a paired computer sends here (USB/IP) are normally usable only by whoever is signed in at
+    this computer's own screen. A remote desktop session has no screen (seat), so PairDesk's users get
+    access to exactly those imported devices: camera, sound, security keys, raw USB."""
+    users = sorted(os.path.basename(p)[len("pairdesk-"):] for p in glob.glob(SUDOERS % "*"))
+    setfacl = shutil.which("setfacl") or "/usr/bin/setfacl"
+    if os.path.exists(OLD_UDEV_RULE):
+        os.unlink(OLD_UDEV_RULE)
+    if not users:
+        if os.path.exists(UDEV_RULE):
+            os.unlink(UDEV_RULE)
+    else:
+        lines = ["# PairDesk: devices sent here by paired computers (USB/IP) are usable by %s, also in a remote"
+                 % ", ".join(users), "# desktop session (it has no seat, so it doesn't get the usual access)."]
+        for u in users:
+            lines.append('ACTION=="add|change", DEVPATH=="/devices/platform/vhci_hcd.*", ENV{DEVNAME}=="?*", '
+                         'SUBSYSTEM=="video4linux|hidraw|sound|usb|usbmisc", RUN+="%s -m u:%s:rw $devnode"'
+                         % (setfacl, u))
+            # the virtual camera that cameras sent from paired computers appear as
+            lines.append('ACTION=="add|change", SUBSYSTEM=="video4linux", ATTR{name}=="PairDesk camera*", '
+                         'RUN+="%s -m u:%s:rw $devnode"' % (setfacl, u))
+        with open(UDEV_RULE + ".tmp", "w") as f:
+            f.write("\n".join(lines) + "\n")
+        os.replace(UDEV_RULE + ".tmp", UDEV_RULE)
+    run(["udevadm", "control", "--reload"], check=False, timeout=30)
+    for d in glob.glob("/sys/devices/platform/vhci_hcd.*"):     # devices already here
+        run(["udevadm", "trigger", "--action=change", "--parent-match=" + d], check=False, timeout=30)
+
+
+def setup(user):
+    if not USER_RE.match(user):
+        die("bad user name", 2)
+    try:
+        pwd.getpwnam(user)
+    except KeyError:
+        die("no such user", 2)
+    caller = os.environ.get("SUDO_USER") or (
+        pwd.getpwuid(int(os.environ["PKEXEC_UID"])).pw_name if os.environ.get("PKEXEC_UID") else None)
+    if caller and caller != "root" and caller != user:
+        die("you can only set up PairDesk for yourself", 2)
+    step("Allowing PairDesk's own admin actions for %s" % user)
+    rule = "%s ALL=(root) NOPASSWD: /usr/libexec/pairdesk/root-helper\n" % user
+    tmp = SUDOERS % user + ".tmp"
+    with open(tmp, "w") as f:
+        f.write(rule)
+    os.chmod(tmp, 0o440)
+    if shutil.which("visudo") and run(["visudo", "-cf", tmp], check=False).returncode != 0:
+        os.unlink(tmp)
+        die("sudoers check failed")
+    os.replace(tmp, SUDOERS % user)
+    step("Checking the USB sharing programs")
+    install_feature("usb")          # usbip (and sudo if missing); explained before setup starts
+    step("Loading the USB sharing kernel modules")
+    with open(MODULES_CONF, "w") as f:
+        f.write("usbip-host\nvhci-hcd\n")
+    for m in ("usbip-host", "vhci-hcd"):
+        run(["modprobe", m], check=False, timeout=60)
+    run(["systemctl", "daemon-reload"], check=False, timeout=60)
+    step("Letting remote sessions use devices sent from other computers")
+    write_udev_rule()
+    step("Turning on network protection")
+    svc("enable", "pairdesk-firewall.service")
+    step("Turning on the USB service")
+    svc("enable", "pairdesk-usbipd.service")
+    u = ssh_unit()
+    if u:
+        svc("enable", u)
+    return status()
+
+
+def unsetup(user):
+    """Undo setup for one user: give USB devices back, stop the services and
+    firewall rule (when no other user still uses them), remove the sudo rule."""
+    if not USER_RE.match(user):
+        die("bad user name", 2)
+    caller = os.environ.get("SUDO_USER") or (
+        pwd.getpwuid(int(os.environ["PKEXEC_UID"])).pw_name if os.environ.get("PKEXEC_UID") else None)
+    if caller and caller != "root" and caller != user:
+        die("you can only undo PairDesk setup for yourself", 2)
+    others = [u for u in (os.path.basename(p)[len("pairdesk-"):] for p in glob.glob(SUDOERS % "*"))
+              if u != user]
+    released = 0
+    if not others:
+        if find_tool("usbip"):
+            for x in usb_ports():                      # devices used from remote computers
+                run([usbip(), "detach", "-p", str(x["port"])], check=False)
+                released += 1
+            for d in glob.glob("/sys/bus/usb/drivers/usbip-host/*"):   # devices lent to remote computers
+                b = os.path.basename(d)
+                if BUSID_RE.match(b):
+                    run([usbip(), "unbind", "-b", b], check=False)
+                    released += 1
+        server_disable()
+        for unit in ("pairdesk-usbipd.service", "pairdesk-firewall.service"):
+            svc("disable", unit)
+        if shutil.which("nft"):
+            run(["nft", "delete", "table", "inet", "pairdesk"], check=False)
+        for ipt in ("iptables", "ip6tables"):
+            if shutil.which(ipt):
+                run([ipt, "-D", "INPUT", "-j", "PAIRDESK"], check=False)
+                run([ipt, "-F", "PAIRDESK"], check=False)
+                run([ipt, "-X", "PAIRDESK"], check=False)
+        for f in (MODULES_CONF, SYS_CONF):
+            if os.path.exists(f):
+                os.unlink(f)
+    if os.path.exists(SUDOERS % user):
+        os.unlink(SUDOERS % user)
+    write_udev_rule()
+    return {"ok": True, "released_devices": released, "kept_for": others}
+
+
+def status():
+    s = load_sys()
+    mods = open("/proc/modules").read() if os.path.exists("/proc/modules") else ""
+    return {
+        "usbip": bool(find_tool("usbip")), "usbipd_active": svc_active("pairdesk-usbipd"),
+        "modules": {"usbip_host": "usbip_host" in mods, "vhci_hcd": "vhci_hcd" in mods},
+        "ssh_active": bool(ssh_unit()) and svc_active(ssh_unit()),
+        "server_on": s.get("server_on", False), "rdp_backend": s.get("backend") if s.get("server_on") else None,
+        "rdp_listening": port_listening(3389), "lock_rdp": s.get("lock_rdp", True),
+        "gnome_available": gnome_available(), "xrdp_available": xrdp_available(),
+        "firewall": firewall_active(), "wol": s.get("wol", []),
+        "setup_users": sorted(os.path.basename(p)[len("pairdesk-"):] for p in glob.glob(SUDOERS % "*")),
+    }
+
+
+# ------------------------------------------------------------------ USB/IP
+def usb_ports():
+    r = run([usbip(), "port"], check=False)
+    res, cur = [], None
+    for line in r.stdout.splitlines():
+        m = re.match(r"\s*Port (\d+):", line)
+        if m:
+            cur = {"port": int(m.group(1))}
+            res.append(cur)
+            continue
+        m = re.search(r"-> usbip://([^:/]+):(\d+)/(\S+)", line)
+        if m and cur is not None:
+            cur.update(host=m.group(1), tcp=int(m.group(2)), busid=m.group(3))
+    return [p for p in res if "busid" in p]
+
+
+def install_update(path):
+    """Install a PairDesk package a paired computer sent. Only through pkexec (an administrator typed
+    a password for exactly this), never through the setup's sudo rule; only from the caller's own
+    ~/.cache/pairdesk/updates; only a newer PairDesk."""
+    # pkexec sets PKEXEC_UID (polkit 127 and later also SUDO_UID/SUDO_GID); real sudo always sets
+    # SUDO_COMMAND and SUDO_USER and drops PKEXEC_UID. So: pkexec only, never the setup's sudo rule.
+    uid = os.environ.get("PKEXEC_UID")
+    if not uid or not uid.isdigit() or os.environ.get("SUDO_COMMAND") or os.environ.get("SUDO_USER") \
+            or os.environ.get("SUDO_UID", uid) != uid:
+        die("Installing an update needs an administrator's password (pkexec).", 2)
+    home = pwd.getpwuid(int(uid)).pw_dir
+    base = os.path.realpath(os.path.join(home, ".cache", "pairdesk", "updates"))
+    real = os.path.realpath(path)
+    name = os.path.basename(real)
+    if not os.path.exists(real):
+        die("The update file isn't there any more (it was probably installed already, e.g. over SSH).")
+    if os.path.dirname(real) != base or not re.match(r"^pairdesk_[0-9][0-9A-Za-z.+~%-]*_all\.deb$", name):
+        die("bad path", 2)
+    st = os.lstat(real)
+    if not stat.S_ISREG(st.st_mode) or st.st_uid != int(uid) or st.st_size > 50 * 1024 * 1024:
+        die("bad file", 2)
+    os.makedirs("/var/cache/pairdesk", mode=0o755, exist_ok=True)
+    dst = os.path.join("/var/cache/pairdesk", name)
+    shutil.copyfile(real, dst)            # a root-owned copy: what is checked is what is installed
+    os.chmod(dst, 0o644)
+    try:
+        f = {}
+        for line in run(["dpkg-deb", "-f", dst, "Package", "Version", "Architecture"]).stdout.splitlines():
+            k, _, v = line.partition(":")
+            f[k.strip()] = v.strip()
+        if f.get("Package") != "pairdesk" or f.get("Architecture") != "all":
+            die("That file isn't a PairDesk package.")
+        have = run(["dpkg-query", "-W", "-f=${Version}", "pairdesk"], check=False).stdout.strip()
+        if have and run(["dpkg", "--compare-versions", f["Version"], "gt", have], check=False).returncode != 0:
+            die("PairDesk %s isn't newer than the installed %s." % (f["Version"], have))
+        step("Installing PairDesk %s" % f["Version"])
+        env = dict(os.environ, DEBIAN_FRONTEND="noninteractive")
+        rc, tail = run_stream(["apt-get", "install", "-y", dst], env=env)
+        if rc != 0:
+            msg = [l for l in tail if l.startswith(("E:", "W:")) and "Status-Fd" not in l] or tail or ["apt error"]
+            die("Installing PairDesk %s failed: %s" % (f["Version"], msg[-1]))
+    finally:
+        os.unlink(dst)
+    try:
+        os.unlink(real)
+    except OSError:
+        pass
+    return {"installed": f["Version"]}
+
+
+def main():
+    a = sys.argv[1:]
+    if not a:
+        die("usage: root-helper COMMAND ...", 2)
+    if os.geteuid() != 0:
+        die("must run as root", 2)
+    cmd = a[0]
+    if cmd == "status":
+        out(status())
+    if cmd == "setup" and len(a) == 2:
+        out(setup(a[1]))
+    if cmd == "unsetup" and len(a) == 2:
+        out(unsetup(a[1]))
+    if cmd == "server-enable" and len(a) == 3:
+        if a[1] not in ("auto", "gnome", "xrdp", "none") or not USER_RE.match(a[2]):
+            die("bad arguments", 2)
+        out(server_enable(a[1], a[2]))
+    if cmd == "install-feature" and len(a) == 2 and re.match(r"^[a-z-]{2,20}$", a[1]):
+        out(install_feature(a[1]))
+    if cmd == "install-xrdp" and len(a) == 2 and USER_RE.match(a[1]):
+        out(install_xrdp(a[1]))
+    if cmd == "server-disable":
+        out(server_disable())
+    if cmd == "set-lock-rdp" and len(a) == 2 and a[1] in ("on", "off"):
+        s = load_sys()
+        s["lock_rdp"] = a[1] == "on"
+        save_sys(s)
+        out({"firewall": firewall_apply()})
+    if cmd == "firewall-apply":
+        out({"firewall": firewall_apply()})
+    if cmd == "firewall-remove":
+        run(["nft", "delete", "table", "inet", "pairdesk"], check=False) if shutil.which("nft") else None
+        for ipt in ("iptables", "ip6tables"):
+            if shutil.which(ipt):
+                run([ipt, "-D", "INPUT", "-j", "PAIRDESK"], check=False)
+                run([ipt, "-F", "PAIRDESK"], check=False)
+                run([ipt, "-X", "PAIRDESK"], check=False)
+        out({"ok": True})
+    if cmd == "run-usbipd":
+        for m in ("usbip-host", "vhci-hcd"):
+            run(["modprobe", m], check=False)
+        d = find_tool("usbipd")
+        if not d:
+            die("usbipd not found")
+        os.execv(d, [d, "--tcp-port", "3240"])
+    if cmd == "usb-bind" and len(a) == 2:
+        b = busid(a[1])
+        run(["modprobe", "usbip-host"], check=False)
+        if os.path.basename(os.path.realpath("/sys/bus/usb/devices/%s/driver" % b)) != "usbip-host":
+            run([usbip(), "bind", "-b", b])
+        out({"ok": True})
+    if cmd == "usb-unbind" and len(a) == 2:
+        b = busid(a[1])
+        if os.path.basename(os.path.realpath("/sys/bus/usb/devices/%s/driver" % b)) == "usbip-host":
+            run([usbip(), "unbind", "-b", b])
+        out({"ok": True})
+    if cmd == "usb-attach" and len(a) == 3:
+        p, b = tcp_port(a[1]), busid(a[2])
+        run(["modprobe", "vhci-hcd"], check=False)
+        if any(x["tcp"] == p and x["busid"] == b for x in usb_ports()):
+            out({"ok": True})
+        run([usbip(), "--tcp-port", str(p), "attach", "-r", "127.0.0.1", "-b", b])
+        out({"ok": True})
+    if cmd == "usb-detach-from" and len(a) == 3:
+        p, b = tcp_port(a[1]), busid(a[2])
+        for x in usb_ports():
+            if x["tcp"] == p and x["busid"] == b:
+                run([usbip(), "detach", "-p", str(x["port"])], check=False)
+        out({"ok": True})
+    if cmd == "usb-ports":
+        out({"ports": usb_ports()})
+    if cmd == "camera-device":
+        out(camera_device())
+    if cmd == "camera-announce":        # the virtual camera has video now: let PipeWire see it again
+        if not os.path.exists(UDEV_RULE):
+            write_udev_rule()
+        dev = camera_device()["device"]
+        run(["udevadm", "trigger", "--action=change", "/sys/class/video4linux/" + os.path.basename(dev)],
+            check=False, timeout=30)
+        run(["udevadm", "settle", "--timeout=10"], check=False, timeout=30)
+        out(camera_device())              # access again, also if the system's rules reset it
+    if cmd == "udev-rule":
+        write_udev_rule()
+        out({"ok": True})
+    if cmd == "install-update" and len(a) == 2:
+        out(install_update(a[1]))
+    die("unknown command", 2)
+
+
+if __name__ == "__main__":
+    main()

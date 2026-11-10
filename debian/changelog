@@ -1,0 +1,125 @@
+pairdesk (2.9.2-1) unstable; urgency=medium
+
+  * Sign-out notice: Cancel is respected; Sign out now connects within seconds.
+
+ -- KnowReva <rahul.thakar@knowreva.com>  Sat, 07 Nov 2026 21:05:00 -0500
+
+pairdesk (2.9.1-1) unstable; urgency=medium
+
+  * Sign-out notice: the sign-out runs from PairDesk's link, not the session.
+
+ -- KnowReva <rahul.thakar@knowreva.com>  Sat, 07 Nov 2026 20:50:00 -0500
+
+pairdesk (2.9.0-1) unstable; urgency=medium
+
+  * Pairing without a shared key: a fresh random knock key per attempt,
+    let in to the pairing gate only; codes tied to the key that asked.
+  * Pairing codes hidden until Show is pressed.
+
+ -- KnowReva <rahul.thakar@knowreva.com>  Sat, 07 Nov 2026 20:30:00 -0500
+
+pairdesk (2.8.3-1) unstable; urgency=medium
+
+  * Fix the sent camera disappearing; sound device choices in Options.
+
+ -- KnowReva <rahul.thakar@knowreva.com>  Sat, 07 Nov 2026 18:55:00 -0500
+
+pairdesk (2.8.2-1) unstable; urgency=medium
+
+  * Sound menu: where remote sound plays, which microphone is sent.
+  * The virtual camera shows up in PipeWire apps (GNOME Camera).
+
+ -- KnowReva <rahul.thakar@knowreva.com>  Sat, 07 Nov 2026 18:45:00 -0500
+
+pairdesk (2.8.1-1) unstable; urgency=medium
+
+  * Camera menu: take back a camera lent as a USB device and send it as video.
+
+ -- KnowReva <rahul.thakar@knowreva.com>  Sat, 07 Nov 2026 18:10:00 -0500
+
+pairdesk (2.8.0-1) unstable; urgency=medium
+
+  * Desktop in PairDesk's own window with a toolbar (USB, camera, folders,
+    full screen, minimize, disconnect); drop-down toolbar in full screen.
+  * Cameras sent as video into a virtual camera on the remote computer.
+
+ -- KnowReva <rahul.thakar@knowreva.com>  Sat, 07 Nov 2026 18:00:00 -0500
+
+pairdesk (2.7.10-1) unstable; urgency=medium
+
+  * Devices sent from another computer work in remote desktop sessions.
+
+ -- KnowReva <rahul.thakar@knowreva.com>  Sat, 07 Nov 2026 17:40:00 -0500
+
+pairdesk (2.7.9-1) unstable; urgency=medium
+
+  * Update window notices an install done another way.
+  * Upgrade reloads systemd and restarts the USB services setup enabled.
+
+ -- KnowReva <rahul.thakar@knowreva.com>  Sat, 07 Nov 2026 17:30:00 -0500
+
+pairdesk (2.7.8-1) unstable; urgency=medium
+
+  * USB: no retry loop after a failed device; clear reason once.
+
+ -- KnowReva <rahul.thakar@knowreva.com>  Sat, 07 Nov 2026 17:25:00 -0500
+
+pairdesk (2.7.7-1) unstable; urgency=medium
+
+  * USB setup in a terminal shows each step; works with sudo-rs.
+
+ -- KnowReva <rahul.thakar@knowreva.com>  Sat, 07 Nov 2026 17:15:00 -0500
+
+pairdesk (2.7.6-1) unstable; urgency=medium
+
+  * Remote access on/off no longer switches the desktop server.
+  * Add-ons installed over SSH ask for the admin password with sudo.
+
+ -- KnowReva <rahul.thakar@knowreva.com>  Sat, 07 Nov 2026 17:10:00 -0500
+
+pairdesk (2.7.5-1) unstable; urgency=medium
+
+  * Install updates with pkexec from polkit 127 (Ubuntu 26.04).
+  * Before signing in, add what the other computer needs over SSH.
+  * Full screen bar also in a window; options saved visibly.
+
+ -- KnowReva <rahul.thakar@knowreva.com>  Sat, 07 Nov 2026 16:55:00 -0500
+
+pairdesk (2.7.4-1) unstable; urgency=medium
+
+  * Offer updates before signing in; install on a remote over SSH.
+  * Fix a crash when disconnecting and update notices sent to an ended session.
+
+ -- KnowReva <rahul.thakar@knowreva.com>  Sat, 07 Nov 2026 16:40:00 -0500
+
+pairdesk (2.7.3-1) unstable; urgency=medium
+
+  * Fix "remote port forwarding failed" after an earlier connection.
+
+ -- KnowReva <rahul.thakar@knowreva.com>  Sat, 07 Nov 2026 16:25:00 -0500
+
+pairdesk (2.7.2-1) unstable; urgency=medium
+
+  * Remember paired computers by IP address; find them again when it changes.
+
+ -- KnowReva <rahul.thakar@knowreva.com>  Sat, 07 Nov 2026 16:10:00 -0500
+
+pairdesk (2.7.1-1) unstable; urgency=medium
+
+  * Signed in on the screen: count only sessions on a real seat.
+
+ -- KnowReva <rahul.thakar@knowreva.com>  Sat, 07 Nov 2026 15:45:00 -0500
+
+pairdesk (2.7.0-1) unstable; urgency=medium
+
+  * New upstream release: paired computers update each other; GNOME on
+    Wayland uses GNOME Remote Login; the sign-out notice shows again.
+
+ -- KnowReva <rahul.thakar@knowreva.com>  Sat, 07 Nov 2026 15:30:00 -0500
+
+pairdesk (2.6.1-1) unstable; urgency=medium
+
+  * First source package release (renamed from DeskBridge). Upstream changes
+    are in CHANGELOG.md.
+
+ -- KnowReva <rahul.thakar@knowreva.com>  Sat, 07 Nov 2026 12:30:00 -0500
