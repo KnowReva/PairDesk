@@ -1,3 +1,10 @@
+pairdesk (2.9.4-1) unstable; urgency=medium
+
+  * Keyboard stays in the remote desktop (Alt+Tab, Super); Right Ctrl or the
+    keyboard button in the desktop bar releases it; help in the bar.
+
+ -- KnowReva <rahul.thakar@knowreva.com>  Fri, 13 Nov 2026 17:00:00 -0500
+
 pairdesk (2.9.3-1) unstable; urgency=medium
 
   * Desktop view no longer takes a session back from someone signing in at the

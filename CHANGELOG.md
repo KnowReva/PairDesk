@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.9.4 (2026-11-13)
+- The keyboard stays in the remote desktop: Alt+Tab, Super and other shortcuts act on the remote computer.
+  **Right Ctrl** gives the keyboard back to this computer and takes it again; the new **keyboard button** in
+  the desktop window's top bar does the same, and a **?** next to it explains it. The mouse is never held.
+- On GNOME with Wayland, PairDesk turns on the two GNOME settings this needs, for PairDesk and its viewer only
+  (other apps' entries are kept).
+- New connection option **Keep keyboard shortcuts in the remote desktop** (on by default), and a help topic.
+- Options saved before a newer option existed now show that option's default, as connecting already used it.
+
 ## 2.9.3 (2026-11-13)
 - Fixed: signing in at the screen of a computer you're connected to (and choosing to end the remote session)
   didn't work: the desktop view reconnected at once and took the session back. The view no longer reconnects

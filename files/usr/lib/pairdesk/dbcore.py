@@ -21,7 +21,7 @@ import threading
 import time
 
 APP = "pairdesk"
-VERSION = "2.9.3"
+VERSION = "2.9.4"
 HELPER = "/usr/libexec/pairdesk/root-helper"
 SFTP_MARKER = "/usr/bin/pairdesk-sftp"
 SLOT_BASE = 47300          # USB back-channel port on the remote side: SLOT_BASE + 2*slot
@@ -33,7 +33,7 @@ DEFAULT_OPTS = {
     "desktop": True, "fullscreen": True, "sound": True, "microphone": True,
     "clipboard": True, "multimon": False, "share_mine": True, "open_theirs": True,
     "printers": False, "quality": "auto", "direct_desktop": False, "clean_mic": False,
-    "sound_where": "here", "mic_device": "", "speaker_device": "",
+    "sound_where": "here", "mic_device": "", "speaker_device": "", "keep_keyboard": True,
 }
 QUALITY = {   # picture quality presets -> FreeRDP options
     "best": ["/network:lan"],
@@ -403,6 +403,39 @@ def desktop_conflict(user=None):
     if signed_in_locally(user or getpass_user()):
         return "signed_in"
     return None
+
+
+GRAB_SCHEMA = "org.gnome.mutter.wayland"
+GRAB_CLASSES = ("pairdesk", "Pairdesk", "xfreerdp", "xfreerdp3")   # PairDesk's window and the viewer's own
+
+
+def allow_keyboard_grab(run=None):
+    """GNOME on Wayland ignores keyboard grabs from X11 apps unless they are allowed, so Alt+Tab and Super would
+    leave the remote desktop. Allow them for PairDesk and its viewer only (this user's GNOME settings; other
+    apps' entries are kept). Returns True when something was changed."""
+    run = run or subprocess.run
+    if os.environ.get("XDG_SESSION_TYPE") != "wayland" or not shutil.which("gsettings"):
+        return False
+    try:
+        allow = run(["gsettings", "get", GRAB_SCHEMA, "xwayland-allow-grabs"], capture_output=True, text=True,
+                    timeout=10)
+        rules = run(["gsettings", "get", GRAB_SCHEMA, "xwayland-grab-access-rules"], capture_output=True,
+                    text=True, timeout=10)
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    if allow.returncode != 0 or rules.returncode != 0:      # not GNOME, or an older GNOME without these
+        return False
+    have = re.findall(r"'([^']*)'", rules.stdout)
+    want = have + [c for c in GRAB_CLASSES if c not in have]
+    changed = False
+    if allow.stdout.strip() != "true":
+        run(["gsettings", "set", GRAB_SCHEMA, "xwayland-allow-grabs", "true"], capture_output=True, timeout=10)
+        changed = True
+    if want != have:
+        run(["gsettings", "set", GRAB_SCHEMA, "xwayland-grab-access-rules",
+             "[%s]" % ", ".join("'%s'" % c.replace("'", "") for c in want)], capture_output=True, timeout=10)
+        changed = True
+    return changed
 
 
 def desktop_end_text(why, name):
@@ -2759,6 +2792,8 @@ class Session:
         if opts.get("multimon") and not embed:
             args.append("/multimon")
         args.append("+clipboard" if opts.get("clipboard") else "-clipboard")
+        # keys (Alt+Tab, Super, ...) go to the remote desktop; Right Ctrl gives the keyboard back and takes it again
+        args.append("+grab-keyboard" if opts.get("keep_keyboard", True) else "-grab-keyboard")
         args += audio_args(opts, clean=bool(getattr(self, "audio_module", None)))
         if opts.get("printers"):
             args.append("/printer")
@@ -2799,6 +2834,8 @@ class Session:
             if self.clean_audio_on(opts):
                 self.log("Microphone: echo and noise reduction on.")
         self.desktop_password = password            # kept in memory only, to reopen the view after changes
+        if opts.get("keep_keyboard", True) and allow_keyboard_grab():
+            self.log("Keyboard shortcuts now stay in the remote desktop (Right Ctrl gives the keyboard back).")
         direct = self.direct_target(rdp_client()[1]) if opts.get("direct_desktop") else None
         embed = None
         if self.embed_host and not opts.get("multimon") and "xfreerdp" in os.path.basename(rdp_client()[0]):

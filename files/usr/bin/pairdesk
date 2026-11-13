@@ -117,6 +117,13 @@ def needs_setup():
 
 
 # ======================================================================= help
+KEY_HELP = """<b>Keyboard in the remote desktop</b>
+All keys go to the remote desktop, Alt+Tab and Super too, so you switch windows <i>there</i>.
+• <b>Right Ctrl</b>: give the keyboard back to this computer (Alt+Tab switches your windows here again). Press it again, or click inside the remote desktop, to send keys there again.
+• The <b>keyboard button</b> in this bar does the same as Right Ctrl.
+• The mouse is never held: move it to this bar or out of the window any time. In full screen, touch the top edge to bring the bar back.
+To keep shortcuts on this computer instead, turn off "Keep keyboard shortcuts in the remote desktop" in the connection options."""
+
 HELP_TOPICS = [
     ("start", "Getting started", """<b>Two computers, two roles</b>
 The computer you sit at <b>connects</b>; the computer you want to see <b>accepts connections</b>. A computer can do both.
@@ -155,6 +162,14 @@ Settings > <b>Accept pairing requests only after I press "Pair a new computer"</
 • <b>In app menu</b> / <b>Connect when I log in</b>: one-click shortcuts
 
 Wi-Fi drops are handled: PairDesk reconnects by itself and puts devices and folders back."""),
+    ("keyboard", "Keyboard in the remote desktop", """All keys go to the remote desktop, Alt+Tab and Super too, so you switch windows <i>there</i>.
+• <b>Right Ctrl</b>: give the keyboard back to this computer (Alt+Tab switches your windows here again). Press it again, or click inside the remote desktop, to send keys there again.
+• The <b>keyboard button</b> in the desktop window's top bar does the same as Right Ctrl; the <b>?</b> next to it shows this help.
+• The mouse is never held: move it to the top bar or out of the window any time. In full screen, touch the top edge to bring the bar back.
+
+To keep shortcuts on this computer instead, turn off <b>Keep keyboard shortcuts in the remote desktop</b> in the connection options.
+
+On GNOME with Wayland, PairDesk turns on two GNOME settings once so this can work (only for PairDesk and its viewer): <tt>org.gnome.mutter.wayland xwayland-allow-grabs</tt> and <tt>xwayland-grab-access-rules</tt>."""),
     ("usb", "USB devices", """USB devices (security keys like YubiKey, webcams, drives) can be used on the other computer, in both directions.
 
 1. Once on each computer: <b>Set up USB sharing</b> (Settings, or the bar at the top). It needs your admin password once.
@@ -966,6 +981,42 @@ class X11:
             X.XSync(dpy, 0)
         return bool(kids)
 
+    @classmethod
+    def press_right_ctrl(cls, win):
+        """Press and release Right Ctrl in the embedded viewer: the same as pressing it on the keyboard (FreeRDP
+        gives the keyboard back, or takes it again). Returns False when there is no viewer yet."""
+        X, dpy = cls._init()
+        ct = cls._ct
+        kids = cls.children(win)
+        if not dpy or not kids:
+            return False
+
+        class Key(ct.Structure):
+            _fields_ = [("type", ct.c_int), ("serial", ct.c_ulong), ("send_event", ct.c_int),
+                        ("display", ct.c_void_p), ("window", ct.c_ulong), ("root", ct.c_ulong),
+                        ("subwindow", ct.c_ulong), ("time", ct.c_ulong), ("x", ct.c_int), ("y", ct.c_int),
+                        ("x_root", ct.c_int), ("y_root", ct.c_int), ("state", ct.c_uint), ("keycode", ct.c_uint),
+                        ("same_screen", ct.c_int)]
+
+        class Event(ct.Union):
+            _fields_ = [("xkey", Key), ("pad", ct.c_long * 24)]
+        X.XDefaultRootWindow.restype = ct.c_ulong
+        X.XDefaultRootWindow.argtypes = [ct.c_void_p]
+        X.XKeysymToKeycode.restype = ct.c_ubyte
+        X.XKeysymToKeycode.argtypes = [ct.c_void_p, ct.c_ulong]
+        X.XSendEvent.argtypes = [ct.c_void_p, ct.c_ulong, ct.c_int, ct.c_long, ct.c_void_p]
+        code = X.XKeysymToKeycode(dpy, 0xffe4)        # XK_Control_R
+        if not code:
+            return False
+        X.XSetInputFocus(dpy, kids[0], 2, 0)
+        for kind, state, mask in ((2, 0, 1), (3, 4, 2)):   # KeyPress then KeyRelease (with ControlMask held)
+            ev = Event()
+            ev.xkey = Key(type=kind, display=dpy, window=kids[0], root=X.XDefaultRootWindow(dpy),
+                          state=state, keycode=code, same_screen=1)
+            X.XSendEvent(dpy, kids[0], 1, mask, ct.byref(ev))
+        X.XSync(dpy, 0)
+        return True
+
 
 # ======================================================================= GUI
 def gui(auto_connect=None):
@@ -1354,6 +1405,11 @@ def gui(auto_connect=None):
             bar.pack_start(btn("camera-web-symbolic", "Camera", self.camera_menu), False, False, 0)
             bar.pack_start(btn("folder-remote-symbolic", "Folders", self.folder_menu), False, False, 0)
             bar.pack_start(btn("audio-volume-high-symbolic", "Sound and microphone", self.sound_menu), False, False, 0)
+            if getattr(self.s, "opts", {}).get("keep_keyboard", True):
+                bar.pack_start(btn("input-keyboard-symbolic", "Keyboard: give it back to this computer, or send it "
+                                   "to the remote desktop again (same as Right Ctrl)", self.toggle_keyboard),
+                               False, False, 0)
+            bar.pack_start(btn("help-about-symbolic", "Keyboard and this bar: help", self.bar_help), False, False, 0)
             bar.pack_start(btn("pairdesk", "Show the PairDesk window", lambda *_: self.app.present()),
                            False, False, 0)
             bar.pack_end(btn("system-shutdown-symbolic", "Disconnect", self.on_disconnect, "pd-danger"),
@@ -1365,6 +1421,24 @@ def gui(auto_connect=None):
             bar.pack_end(full, False, False, 0)
             bar.pack_end(btn("window-minimize-symbolic", "Minimize", lambda *_: self.iconify()), False, False, 0)
             return bar
+
+        def toggle_keyboard(self, *_):
+            """The same as Right Ctrl: the viewer gives the keyboard back to this computer, or takes it again."""
+            if not (self.xid and X11.press_right_ctrl(self.xid)):
+                self.app.log("Press Right Ctrl to switch the keyboard (the desktop isn't ready yet).")
+
+        def bar_help(self, widget):
+            pop = Gtk.Popover(relative_to=widget, position=Gtk.PositionType.BOTTOM)
+            lbl = Gtk.Label(xalign=0, wrap=True, max_width_chars=60, margin=12)
+            lbl.set_markup(KEY_HELP)
+            pop.add(lbl)
+            self.pop_menu_open = True
+
+            def closed(*_):
+                self.pop_menu_open = False
+                GLib.timeout_add(100, self.give_focus)
+            pop.connect("closed", closed)
+            pop.show_all()
 
         def popup(self, menu, widget):
             menu.show_all()
@@ -1934,7 +2008,8 @@ def gui(auto_connect=None):
                       ("microphone", "Current microphone on remote"), ("clipboard", "Shared clipboard"),
                       ("multimon", "Use all current monitors"), ("share_mine", "Share current folder with remote"),
                       ("open_theirs", "Open remote shared folder"), ("printers", "Current printers on remote"),
-                      ("direct_desktop", "Direct desktop stream (faster on slow computers)")]
+                      ("direct_desktop", "Direct desktop stream (faster on slow computers)"),
+                      ("keep_keyboard", "Keep keyboard shortcuts in the remote desktop (Right Ctrl releases)")]
             self.opt_labels = dict(labels)
             for k, lbl in labels:
                 cb = Gtk.CheckButton(label=lbl)
@@ -2043,7 +2118,7 @@ def gui(auto_connect=None):
             n, p = self.peer()
             self._quiet = True
             for k, cb in self.opt_checks.items():
-                cb.set_active(bool((p or {}).get("opts", C.DEFAULT_OPTS).get(k)))
+                cb.set_active(bool(dict(C.DEFAULT_OPTS, **((p or {}).get("opts") or {})).get(k)))
                 cb.set_sensitive(p is not None)
             self.quality.set_active_id((p or {}).get("opts", {}).get("quality", "auto"))
             self.quality.set_sensitive(p is not None)

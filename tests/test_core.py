@@ -769,3 +769,83 @@ class DesktopEndsThere(unittest.TestCase):
         s.closing = True
         self.assertEqual(self.run_watch(s), [131])
         self.assertEqual(s.started, [])
+
+
+class KeyboardStaysInRemote(unittest.TestCase):
+    """Alt+Tab, Super, ... go to the remote desktop: FreeRDP grabs the keyboard (Right Ctrl releases), and
+    GNOME on Wayland is told to allow that grab for PairDesk and its viewer only."""
+
+    def gs(self, allow="false", rules="@as []", ok=True):
+        calls = []
+
+        def run(cmd, **kw):
+            calls.append(cmd)
+            if cmd[1] == "get":
+                out = allow if cmd[3] == "xwayland-allow-grabs" else rules
+                return subprocess.CompletedProcess(cmd, 0 if ok else 1, out + "\n", "")
+            return subprocess.CompletedProcess(cmd, 0, "", "")
+        return run, calls
+
+    def setUp(self):
+        self.env = mock.patch.dict(os.environ, {"XDG_SESSION_TYPE": "wayland"})
+        self.env.start()
+        self.which = mock.patch.object(C.shutil, "which", return_value="/usr/bin/gsettings")
+        self.which.start()
+
+    def tearDown(self):
+        self.which.stop()
+        self.env.stop()
+
+    def sets(self, calls):
+        return [c[3:] for c in calls if c[1] == "set"]
+
+    def test_turns_on_grabs_for_pairdesk_and_the_viewer(self):
+        run, calls = self.gs()
+        self.assertTrue(C.allow_keyboard_grab(run))
+        self.assertEqual(self.sets(calls), [
+            ["xwayland-allow-grabs", "true"],
+            ["xwayland-grab-access-rules", "['pairdesk', 'Pairdesk', 'xfreerdp', 'xfreerdp3']"]])
+
+    def test_keeps_other_apps_rules_and_changes_nothing_when_set(self):
+        run, calls = self.gs("true", "['vmware', 'pairdesk']")
+        self.assertTrue(C.allow_keyboard_grab(run))
+        self.assertEqual(self.sets(calls), [["xwayland-grab-access-rules",
+                                             "['vmware', 'pairdesk', 'Pairdesk', 'xfreerdp', 'xfreerdp3']"]])
+        run, calls = self.gs("true", "['pairdesk', 'Pairdesk', 'xfreerdp', 'xfreerdp3']")
+        self.assertFalse(C.allow_keyboard_grab(run))
+        self.assertEqual(self.sets(calls), [])
+
+    def test_not_wayland_or_not_gnome_is_left_alone(self):
+        run, calls = self.gs(ok=False)                       # no such GNOME schema
+        self.assertFalse(C.allow_keyboard_grab(run))
+        self.assertEqual(self.sets(calls), [])
+        with mock.patch.dict(os.environ, {"XDG_SESSION_TYPE": "x11"}):
+            run, calls = self.gs()
+            self.assertFalse(C.allow_keyboard_grab(run))
+            self.assertEqual(calls, [])
+
+    def _args(self, opts):
+        s = C.Session.__new__(C.Session)
+        s.p, s.lrdp, s.name = {"user": "alex", "rdp_user": "alex"}, 45000, "office-pc"
+        with mock.patch.object(C, "rdp_client", return_value=("/usr/bin/xfreerdp3", 3)):
+            return s.rdp_cmd("pw", opts, None, None)[2]
+
+    def test_viewer_grabs_the_keyboard_by_default(self):
+        self.assertTrue(C.DEFAULT_OPTS["keep_keyboard"])
+        self.assertIn("+grab-keyboard", self._args({}))
+        self.assertIn("+grab-keyboard", self._args(dict(C.DEFAULT_OPTS)))
+        a = self._args({"keep_keyboard": False})
+        self.assertIn("-grab-keyboard", a)
+        self.assertNotIn("+grab-keyboard", a)
+        self.assertFalse(any("grab-mouse" in x for x in a))   # the mouse is never held by PairDesk
+
+
+class HelpPage(unittest.TestCase):
+    def test_help_topics_stay_plain_text_for_the_site(self):
+        import ast
+        src = open(os.path.join(os.path.dirname(__file__), "..", "files", "usr", "bin", "pairdesk")).read()
+        i = src.index("HELP_TOPICS = [")
+        j = src.index("\n]\n", i) + 3
+        topics = ast.literal_eval(src[i + len("HELP_TOPICS = "):j].strip())
+        self.assertIn("keyboard", [t[0] for t in topics])
+        self.assertIn("Right Ctrl", dict((t[0], t[2]) for t in topics)["keyboard"])
