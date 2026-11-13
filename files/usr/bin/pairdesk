@@ -120,7 +120,7 @@ def needs_setup():
 KEY_HELP = """<b>Keyboard in the remote desktop</b>
 All keys go to the remote desktop, Alt+Tab and Super too, so you switch windows <i>there</i>.
 • <b>Right Ctrl</b>: give the keyboard back to this computer (Alt+Tab switches your windows here again). Press it again, or click inside the remote desktop, to send keys there again.
-• The <b>keyboard button</b> in this bar does the same as Right Ctrl.
+• The <b>keyboard button</b> in this bar shows where keys go (<b>Keys: remote</b>, in blue, or <b>Keys: this computer</b>) and switches like Right Ctrl.
 • The mouse is never held: move it to this bar or out of the window any time. In full screen, touch the top edge to bring the bar back.
 To keep shortcuts on this computer instead, turn off "Keep keyboard shortcuts in the remote desktop" in the connection options."""
 
@@ -164,7 +164,7 @@ Settings > <b>Accept pairing requests only after I press "Pair a new computer"</
 Wi-Fi drops are handled: PairDesk reconnects by itself and puts devices and folders back."""),
     ("keyboard", "Keyboard in the remote desktop", """All keys go to the remote desktop, Alt+Tab and Super too, so you switch windows <i>there</i>.
 • <b>Right Ctrl</b>: give the keyboard back to this computer (Alt+Tab switches your windows here again). Press it again, or click inside the remote desktop, to send keys there again.
-• The <b>keyboard button</b> in the desktop window's top bar does the same as Right Ctrl; the <b>?</b> next to it shows this help.
+• The <b>keyboard button</b> in the desktop window's top bar shows where keys go (<b>Keys: remote</b>, in blue, or <b>Keys: this computer</b>) and switches like Right Ctrl; the <b>?</b> next to it shows this help.
 • The mouse is never held: move it to the top bar or out of the window any time. In full screen, touch the top edge to bring the bar back.
 
 To keep shortcuts on this computer instead, turn off <b>Keep keyboard shortcuts in the remote desktop</b> in the connection options.
@@ -981,6 +981,86 @@ class X11:
             X.XSync(dpy, 0)
         return bool(kids)
 
+    _xi_op = _rctrl = None
+
+    @classmethod
+    def watch_keys(cls):
+        """Receive raw key and button presses (XInput 2.2): they arrive even while another program (the viewer)
+        holds the keyboard, so PairDesk can see Right Ctrl. Returns True when available."""
+        X, dpy = cls._init()
+        ct = cls._ct
+        if not dpy:
+            return False
+        if cls._xi_op is not None:
+            return True
+        try:
+            xi = ct.cdll.LoadLibrary(ct.util.find_library("Xi") or "libXi.so.6")
+        except OSError:
+            return False
+        op, ev, err = ct.c_int(), ct.c_int(), ct.c_int()
+        X.XQueryExtension.argtypes = [ct.c_void_p, ct.c_char_p] + [ct.POINTER(ct.c_int)] * 3
+        if not X.XQueryExtension(dpy, b"XInputExtension", ct.byref(op), ct.byref(ev), ct.byref(err)):
+            return False
+        major, minor = ct.c_int(2), ct.c_int(2)
+        xi.XIQueryVersion.argtypes = [ct.c_void_p, ct.POINTER(ct.c_int), ct.POINTER(ct.c_int)]
+        if xi.XIQueryVersion(dpy, ct.byref(major), ct.byref(minor)) != 0:
+            return False
+
+        class Mask(ct.Structure):
+            _fields_ = [("deviceid", ct.c_int), ("mask_len", ct.c_int), ("mask", ct.POINTER(ct.c_ubyte))]
+        cls._bits = (ct.c_ubyte * 4)(0, 0xA0, 0, 0)          # XI_RawKeyPress (13), XI_RawButtonPress (15)
+        cls._mask = Mask(1, 4, ct.cast(cls._bits, ct.POINTER(ct.c_ubyte)))   # all master devices
+        X.XDefaultRootWindow.restype = ct.c_ulong
+        X.XDefaultRootWindow.argtypes = [ct.c_void_p]
+        xi.XISelectEvents.argtypes = [ct.c_void_p, ct.c_ulong, ct.c_void_p, ct.c_int]
+        xi.XISelectEvents(dpy, X.XDefaultRootWindow(dpy), ct.byref(cls._mask), 1)
+        X.XKeysymToKeycode.restype = ct.c_ubyte
+        X.XKeysymToKeycode.argtypes = [ct.c_void_p, ct.c_ulong]
+        cls._rctrl = X.XKeysymToKeycode(dpy, 0xffe4)          # XK_Control_R
+        for f in ("XPending", "XFlush"):
+            getattr(X, f).argtypes = [ct.c_void_p]
+        X.XNextEvent.argtypes = [ct.c_void_p, ct.c_void_p]
+        X.XGetEventData.argtypes = [ct.c_void_p, ct.c_void_p]
+        X.XFreeEventData.argtypes = [ct.c_void_p, ct.c_void_p]
+        X.XFlush(dpy)
+        cls._xi_op = op.value
+        return True
+
+    @classmethod
+    def raw_presses(cls):
+        """Raw presses since the last call: "right_ctrl" and "click" in order."""
+        X, dpy = cls._init()
+        ct = cls._ct
+        if cls._xi_op is None or not dpy:
+            return []
+
+        class Cookie(ct.Structure):
+            _fields_ = [("type", ct.c_int), ("serial", ct.c_ulong), ("send_event", ct.c_int),
+                        ("display", ct.c_void_p), ("extension", ct.c_int), ("evtype", ct.c_int),
+                        ("cookie", ct.c_uint), ("data", ct.c_void_p)]
+
+        class Raw(ct.Structure):
+            _fields_ = [("type", ct.c_int), ("serial", ct.c_ulong), ("send_event", ct.c_int),
+                        ("display", ct.c_void_p), ("extension", ct.c_int), ("evtype", ct.c_int),
+                        ("time", ct.c_ulong), ("deviceid", ct.c_int), ("sourceid", ct.c_int), ("detail", ct.c_int)]
+        out, ev = [], (ct.c_long * 24)()
+        while X.XPending(dpy):
+            X.XNextEvent(dpy, ct.byref(ev))
+            cookie = Cookie.from_buffer(ev)
+            if cookie.type != 35 or cookie.extension != cls._xi_op:     # GenericEvent from XInput only
+                continue
+            if not X.XGetEventData(dpy, ct.byref(cookie)):
+                continue
+            try:
+                raw = ct.cast(cookie.data, ct.POINTER(Raw)).contents
+                if cookie.evtype == 13 and raw.detail == cls._rctrl:
+                    out.append("right_ctrl")
+                elif cookie.evtype == 15 and raw.detail in (1, 2, 3):
+                    out.append("click")
+            finally:
+                X.XFreeEventData(dpy, ct.byref(cookie))
+        return out
+
     @classmethod
     def press_right_ctrl(cls, win):
         """Press and release Right Ctrl in the embedded viewer: the same as pressing it on the keyboard (FreeRDP
@@ -1031,6 +1111,7 @@ def gui(auto_connect=None):
     .pd-bar button { color: #e9edf2; min-height: 26px; min-width: 30px; padding: 2px 6px; }
     .pd-bar button:hover { background-color: alpha(#ffffff, 0.12); }
     .pd-bar button.pd-danger:hover { background-color: #c01c28; }
+    .pd-bar button.pd-keys-remote { background-color: #0a6cc4; }
     .pd-pop .pd-bar { border-radius: 0 0 10px 10px; padding: 4px 8px; }
     .pd-desk { background-color: #000000; }
     .db-card { background-color: @theme_base_color; border: 1px solid alpha(@borders, 0.55);
@@ -1293,12 +1374,19 @@ def gui(auto_connect=None):
             self.pop_menu_open = False
             self.connect("delete-event", self.on_close)
             self.connect("focus-in-event", lambda *_: GLib.timeout_add(80, self.give_focus) and False)
+            self.kstate = C.KeyboardState(lambda where: self.show_keyboard())
+            self.connect("notify::is-active", lambda *_: self.get_property("is-active") and
+                         getattr(self, "keys_watched", False) and self.kstate.focus_in())
             self.connect("window-state-event", self.on_state)
             self.show_all()
             self.area.get_window().ensure_native()
             self.xid = self.area.get_window().get_xid()
             self._hide_at = 0
             GLib.timeout_add(150, self.watch_pointer)
+            if getattr(s, "opts", {}).get("keep_keyboard", True) and X11.watch_keys():
+                self.keys_watched = True
+                GLib.timeout_add(100, self.poll_keys)
+            self.show_keyboard()
 
         # -- the viewer inside
         def target(self):
@@ -1406,9 +1494,18 @@ def gui(auto_connect=None):
             bar.pack_start(btn("folder-remote-symbolic", "Folders", self.folder_menu), False, False, 0)
             bar.pack_start(btn("audio-volume-high-symbolic", "Sound and microphone", self.sound_menu), False, False, 0)
             if getattr(self.s, "opts", {}).get("keep_keyboard", True):
-                bar.pack_start(btn("input-keyboard-symbolic", "Keyboard: give it back to this computer, or send it "
-                                   "to the remote desktop again (same as Right Ctrl)", self.toggle_keyboard),
-                               False, False, 0)
+                kb = Gtk.Button(focus_on_click=False, relief=Gtk.ReliefStyle.NONE)
+                kbox = Gtk.Box(spacing=4)
+                kbox.pack_start(Gtk.Image.new_from_icon_name("input-keyboard-symbolic", Gtk.IconSize.BUTTON),
+                                False, False, 0)
+                kb.label = Gtk.Label()
+                kbox.pack_start(kb.label, False, False, 0)
+                kb.add(kbox)
+                kb.connect("clicked", self.toggle_keyboard)
+                if not hasattr(self, "kbd_btns"):
+                    self.kbd_btns = []
+                self.kbd_btns.append(kb)
+                bar.pack_start(kb, False, False, 0)
             bar.pack_start(btn("help-about-symbolic", "Keyboard and this bar: help", self.bar_help), False, False, 0)
             bar.pack_start(btn("pairdesk", "Show the PairDesk window", lambda *_: self.app.present()),
                            False, False, 0)
@@ -1424,8 +1521,44 @@ def gui(auto_connect=None):
 
         def toggle_keyboard(self, *_):
             """The same as Right Ctrl: the viewer gives the keyboard back to this computer, or takes it again."""
-            if not (self.xid and X11.press_right_ctrl(self.xid)):
+            if self.xid and X11.press_right_ctrl(self.xid):
+                self.kstate.button()          # a sent key isn't seen as a raw press: follow it here
+            else:
                 self.app.log("Press Right Ctrl to switch the keyboard (the desktop isn't ready yet).")
+
+        def poll_keys(self):
+            if not self.get_realized():
+                return False
+            for what in X11.raw_presses():
+                if what == "right_ctrl":
+                    self.kstate.right_ctrl(self.get_property("is-active"))
+                elif what == "click":
+                    self.kstate.click(self.get_property("is-active") and self.pointer_in_desktop())
+            return True
+
+        def pointer_in_desktop(self):
+            win = self.area.get_window()
+            if not win:
+                return False
+            _w, x, y, _m = win.get_device_position(self.get_display().get_default_seat().get_pointer())
+            a = self.area.get_allocation()
+            return 0 <= x < a.width and 0 <= y < a.height
+
+        def show_keyboard(self):
+            """The bar says where the keys go now."""
+            known = getattr(self, "keys_watched", False)
+            remote = self.kstate.where == "remote"
+            for kb in getattr(self, "kbd_btns", []):
+                kb.label.set_text(("Keys: remote" if remote else "Keys: this computer") if known else "Keyboard")
+                ctx = kb.get_style_context()
+                (ctx.add_class if known and remote else ctx.remove_class)("pd-keys-remote")
+                kb.set_tooltip_text(
+                    ("Keys go to the remote desktop (Alt+Tab and Super too). Click or press Right Ctrl to use "
+                     "them on this computer." if remote else
+                     "Keys stay on this computer. Click, press Right Ctrl, or click inside the desktop to send them "
+                     "to the remote desktop.") if known else
+                    "Keyboard: give it back to this computer, or send it to the remote desktop again (same as "
+                    "Right Ctrl)")
 
         def bar_help(self, widget):
             pop = Gtk.Popover(relative_to=widget, position=Gtk.PositionType.BOTTOM)
@@ -1594,6 +1727,10 @@ def gui(auto_connect=None):
         def __init__(self, auto_connect=None):
             super().__init__(title="PairDesk")
             C.HOSTKEY_CONFIRM = self.confirm_new_identity
+            try:
+                C.hide_viewer_launchers()        # PairDesk opens the viewer: its own app icon isn't needed
+            except OSError as e:
+                C.flog("FreeRDP's app icon not hidden: %s" % e)
             apply_theme(C.load_config())
             try:   # fit the screen: 90 % of the work area, at most 860 x 720
                 disp = Gdk.Display.get_default()

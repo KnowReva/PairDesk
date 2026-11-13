@@ -1,3 +1,11 @@
+pairdesk (2.9.5-1) unstable; urgency=medium
+
+  * Desktop bar shows where the keys go: "Keys: remote" or "Keys: this computer".
+  * FreeRDP's own app icon hidden from the user's app list; its window shows as
+    PairDesk in the dock.
+
+ -- KnowReva <rahul.thakar@knowreva.com>  Fri, 13 Nov 2026 17:20:00 -0500
+
 pairdesk (2.9.4-1) unstable; urgency=medium
 
   * Keyboard stays in the remote desktop (Alt+Tab, Super); Right Ctrl or the

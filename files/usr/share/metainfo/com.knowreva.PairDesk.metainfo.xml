@@ -75,6 +75,11 @@
     <display_length compare="ge">720</display_length>
   </requires>
   <releases>
+    <release version="2.9.5" date="2026-11-13">
+      <description>
+        <p>The desktop window's bar shows whether the keys go to the remote desktop or stay on this computer.</p>
+      </description>
+    </release>
     <release version="2.9.4" date="2026-11-13">
       <description>
         <p>Keyboard shortcuts such as Alt+Tab stay in the remote desktop; Right Ctrl or the keyboard button gives the keyboard back.</p>

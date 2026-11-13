@@ -21,7 +21,7 @@ import threading
 import time
 
 APP = "pairdesk"
-VERSION = "2.9.4"
+VERSION = "2.9.5"
 HELPER = "/usr/libexec/pairdesk/root-helper"
 SFTP_MARKER = "/usr/bin/pairdesk-sftp"
 SLOT_BASE = 47300          # USB back-channel port on the remote side: SLOT_BASE + 2*slot
@@ -436,6 +436,83 @@ def allow_keyboard_grab(run=None):
              "[%s]" % ", ".join("'%s'" % c.replace("'", "") for c in want)], capture_output=True, timeout=10)
         changed = True
     return changed
+
+
+VIEWER_EXECS = ("xfreerdp", "xfreerdp3", "sdl-freerdp", "sdl-freerdp3", "wlfreerdp", "wlfreerdp3")
+
+
+def hide_viewer_launchers(system_dirs=("/usr/share/applications", "/usr/local/share/applications"), user_dir=None):
+    """FreeRDP's own app icon (installed with it) is hidden from this user's app list: PairDesk opens it. A copy
+    with NoDisplay=true in ~/.local/share/applications overrides it (delete the copy to see it again); nothing
+    outside the home folder changes, and a copy already there (the user's own choice) is left alone.
+    Returns the launchers hidden now."""
+    user_dir = user_dir or os.path.join(os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share"),
+                                        "applications")
+    hidden = []
+    for d in system_dirs:
+        for f in sorted(glob.glob(os.path.join(d, "*.desktop"))):
+            name = os.path.basename(f)
+            if os.path.exists(os.path.join(user_dir, name)):
+                continue
+            try:
+                with open(f) as fh:
+                    text = fh.read()
+            except OSError:
+                continue
+            m = re.search(r"^Exec=(\S+)", text, re.M)
+            if not m or os.path.basename(m.group(1)) not in VIEWER_EXECS:
+                continue
+            out, in_entry, done = [], False, False
+            for line in text.splitlines():
+                if line.startswith("["):
+                    if in_entry and not done:
+                        out.append("NoDisplay=true")
+                        done = True
+                    in_entry = line.strip() == "[Desktop Entry]"
+                elif in_entry and line.startswith("NoDisplay="):
+                    continue
+                out.append(line)
+            if in_entry and not done:
+                out.append("NoDisplay=true")
+            os.makedirs(user_dir, exist_ok=True)
+            with open(os.path.join(user_dir, name), "w") as fh:
+                fh.write("\n".join(out) + "\n")
+            hidden.append(name)
+    return hidden
+
+
+class KeyboardState:
+    """Where the keys go while the desktop window is open: "remote" (the viewer holds the keyboard: Alt+Tab, Super
+    act there) or "local". The viewer doesn't say, so PairDesk follows what switches it: Right Ctrl, the bar's
+    keyboard button, a click into the desktop and the window getting the focus back. on_change(where) runs on
+    each change."""
+
+    def __init__(self, on_change=None, where="remote"):
+        self.where, self.on_change = where, on_change
+
+    def _set(self, where):
+        if where != self.where:
+            self.where = where
+            if self.on_change:
+                self.on_change(where)
+
+    def right_ctrl(self, window_active):
+        """Right Ctrl pressed (seen even while the viewer holds the keyboard). Only counts in this window."""
+        if window_active or self.where == "remote":
+            self._set("local" if self.where == "remote" else "remote")
+
+    def button(self):
+        """The bar's keyboard button: the same as Right Ctrl."""
+        self._set("local" if self.where == "remote" else "remote")
+
+    def click(self, in_desktop):
+        """A click: inside the desktop the viewer takes the keyboard again."""
+        if in_desktop:
+            self._set("remote")
+
+    def focus_in(self):
+        """The desktop window got the focus back: the viewer takes the keyboard again."""
+        self._set("remote")
 
 
 def desktop_end_text(why, name):
@@ -2786,6 +2863,7 @@ class Session:
             args += ["/parent-window:%d" % embed[0], "/size:%dx%d" % (embed[1], embed[2]), "-toggle-fullscreen"]
         else:          # FreeRDP's own window, with its bar: minimize, full screen on/off, close
             args.append("/floatbar:sticky:off,default:visible,show:always")
+            args.append("/wm-class:pairdesk")      # the dock shows it as PairDesk, not as a separate FreeRDP
         args += QUALITY.get(opts.get("quality", "auto"), QUALITY["auto"])
         if opts.get("fullscreen") and not embed:
             args.append("/f")

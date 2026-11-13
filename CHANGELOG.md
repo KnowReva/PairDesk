@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.9.5 (2026-11-13)
+- The desktop window's top bar shows where the keys go: **Keys: remote** (blue) or **Keys: this computer**. It
+  follows Right Ctrl, the keyboard button, a click into the desktop and the window getting the focus back.
+- FreeRDP's own app icon is hidden from your app list (PairDesk opens the viewer): a copy of its launcher with
+  NoDisplay=true goes into ~/.local/share/applications (delete it to see the icon again). A desktop in its own
+  window shows in the dock as PairDesk.
+
 ## 2.9.4 (2026-11-13)
 - The keyboard stays in the remote desktop: Alt+Tab, Super and other shortcuts act on the remote computer.
   **Right Ctrl** gives the keyboard back to this computer and takes it again; the new **keyboard button** in

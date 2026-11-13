@@ -849,3 +849,84 @@ class HelpPage(unittest.TestCase):
         topics = ast.literal_eval(src[i + len("HELP_TOPICS = "):j].strip())
         self.assertIn("keyboard", [t[0] for t in topics])
         self.assertIn("Right Ctrl", dict((t[0], t[2]) for t in topics)["keyboard"])
+
+
+class KeyboardIndicator(unittest.TestCase):
+    """The bar says where the keys go: it follows Right Ctrl, its own button, clicks and the window's focus."""
+
+    def setUp(self):
+        self.seen = []
+        self.k = C.KeyboardState(self.seen.append)
+
+    def test_starts_in_the_remote_and_right_ctrl_toggles(self):
+        self.assertEqual(self.k.where, "remote")
+        self.k.right_ctrl(window_active=True)
+        self.k.right_ctrl(window_active=True)
+        self.assertEqual(self.seen, ["local", "remote"])
+
+    def test_right_ctrl_elsewhere_doesnt_count_once_released(self):
+        self.k.right_ctrl(window_active=True)            # released here
+        self.k.right_ctrl(window_active=False)           # pressed in another app: not for the viewer
+        self.assertEqual(self.k.where, "local")
+        self.k.right_ctrl(window_active=True)
+        self.assertEqual(self.k.where, "remote")
+
+    def test_while_held_right_ctrl_always_releases(self):
+        self.k.right_ctrl(window_active=False)           # held keyboard: the key goes to the viewer anyway
+        self.assertEqual(self.k.where, "local")
+
+    def test_button_click_and_focus(self):
+        self.k.button()
+        self.assertEqual(self.k.where, "local")
+        self.k.click(in_desktop=False)                   # e.g. the bar: stays local
+        self.assertEqual(self.k.where, "local")
+        self.k.click(in_desktop=True)
+        self.assertEqual(self.k.where, "remote")
+        self.k.button()
+        self.k.focus_in()
+        self.assertEqual(self.seen, ["local", "remote", "local", "remote"])
+
+    def test_no_change_no_call(self):
+        self.k.click(in_desktop=True)
+        self.k.focus_in()
+        self.assertEqual(self.seen, [])
+
+
+class ViewerIcon(unittest.TestCase):
+    """FreeRDP's own app icon is hidden for this user only (a NoDisplay copy in the home folder)."""
+
+    def test_hides_freerdp_launchers_only_in_the_home_folder(self):
+        with tempfile.TemporaryDirectory() as t:
+            sysd, user = os.path.join(t, "sys"), os.path.join(t, "user")
+            os.makedirs(sysd)
+            open(os.path.join(sysd, "com.freerdp.FreeRDP.desktop"), "w").write(
+                "[Desktop Entry]\nName=FreeRDP\nExec=/usr/bin/xfreerdp3 %U\nNoDisplay=false\n"
+                "[Desktop Action new]\nName=New\nExec=xfreerdp3\n")
+            open(os.path.join(sysd, "org.gnome.Terminal.desktop"), "w").write("[Desktop Entry]\nExec=gnome-terminal\n")
+            open(os.path.join(sysd, "sdl.desktop"), "w").write("[Desktop Entry]\nExec=sdl-freerdp3\n")
+            self.assertEqual(C.hide_viewer_launchers((sysd,), user), ["com.freerdp.FreeRDP.desktop", "sdl.desktop"])
+            text = open(os.path.join(user, "com.freerdp.FreeRDP.desktop")).read()
+            self.assertEqual(text, "[Desktop Entry]\nName=FreeRDP\nExec=/usr/bin/xfreerdp3 %U\nNoDisplay=true\n"
+                                   "[Desktop Action new]\nName=New\nExec=xfreerdp3\n")
+            self.assertTrue(open(os.path.join(user, "sdl.desktop")).read().endswith("NoDisplay=true\n"))
+            self.assertFalse(os.path.exists(os.path.join(user, "org.gnome.Terminal.desktop")))
+            self.assertIn("NoDisplay=false", open(os.path.join(sysd, "com.freerdp.FreeRDP.desktop")).read())
+
+    def test_a_copy_already_there_is_left_alone(self):
+        with tempfile.TemporaryDirectory() as t:
+            sysd, user = os.path.join(t, "sys"), os.path.join(t, "user")
+            os.makedirs(sysd)
+            os.makedirs(user)
+            open(os.path.join(sysd, "x.desktop"), "w").write("[Desktop Entry]\nExec=xfreerdp\n")
+            open(os.path.join(user, "x.desktop"), "w").write("mine\n")
+            self.assertEqual(C.hide_viewer_launchers((sysd,), user), [])
+            self.assertEqual(open(os.path.join(user, "x.desktop")).read(), "mine\n")
+
+    def test_own_window_shows_as_pairdesk(self):
+        s = C.Session.__new__(C.Session)
+        s.p, s.lrdp, s.name = {"user": "alex", "rdp_user": "alex"}, 45000, "office-pc"
+        with mock.patch.object(C, "rdp_client", return_value=("/usr/bin/xfreerdp3", 3)):
+            own = s.rdp_cmd("pw", {}, None, None)[2]
+            inside = s.rdp_cmd("pw", {}, None, (1, 800, 600))[2]
+        self.assertIn("/wm-class:pairdesk", own)
+        self.assertNotIn("/wm-class:pairdesk", inside)
