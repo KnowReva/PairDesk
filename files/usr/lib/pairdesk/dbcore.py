@@ -21,7 +21,7 @@ import threading
 import time
 
 APP = "pairdesk"
-VERSION = "2.9.2"
+VERSION = "2.9.3"
 HELPER = "/usr/libexec/pairdesk/root-helper"
 SFTP_MARKER = "/usr/bin/pairdesk-sftp"
 SLOT_BASE = 47300          # USB back-channel port on the remote side: SLOT_BASE + 2*slot
@@ -403,6 +403,15 @@ def desktop_conflict(user=None):
     if signed_in_locally(user or getpass_user()):
         return "signed_in"
     return None
+
+
+def desktop_end_text(why, name):
+    """What to tell the person whose desktop view closed because the other computer ended the session."""
+    if why == "signed_in":
+        return ("Someone signed in at the screen of %s, so the desktop session there was handed to them and the "
+                "view here closed. Connect again when that screen is free." % name)
+    return ("The desktop session was ended on %s itself (signed out there, or ended by someone signing in at "
+            "its screen), so PairDesk didn't open it again." % name)
 
 
 def logout_state_path(peer):
@@ -1111,7 +1120,85 @@ def ssh_ctl_opts():
             "-o", "ControlPath=" + os.path.join(run_dir(), "ssh-%C")]
 
 
-def ssh_run(login, command, timeout=120):
+# Set by the app: confirm(host, port, fingerprint) -> True to trust a computer's changed SSH identity
+# (e.g. after its system was reinstalled). Without it, a changed identity stops with an explanation.
+HOSTKEY_CONFIRM = None
+
+
+def ssh_target(login):
+    """(host, port) that ssh really uses for a login, its SSH settings included."""
+    try:
+        out = subprocess.run(["ssh", "-G", login], capture_output=True, text=True, timeout=10).stdout
+    except (OSError, subprocess.TimeoutExpired):
+        out = ""
+    kv = {}
+    for line in out.splitlines():
+        k, _, v = line.partition(" ")
+        kv.setdefault(k.lower(), v.strip())
+    try:
+        port = int(kv.get("port") or 22)
+    except ValueError:
+        port = 22
+    return kv.get("hostname") or login.rsplit("@", 1)[-1], port
+
+
+def ssh_host_keys(host, port):
+    """The SSH host keys the computer at host:port shows now (known_hosts lines, unauthenticated)."""
+    try:
+        r = subprocess.run(["ssh-keyscan", "-T", "6", "-p", str(port), host], capture_output=True, text=True,
+                           timeout=20)
+    except (OSError, subprocess.TimeoutExpired):
+        return []
+    return [line for line in r.stdout.splitlines() if line.strip() and not line.startswith("#")]
+
+
+def key_fingerprint(lines):
+    """SHA256 fingerprint of the ed25519 key among known_hosts lines (else the first key), or ''."""
+    best = [line for line in lines if " ssh-ed25519 " in line] or lines
+    if not best:
+        return ""
+    try:
+        r = subprocess.run(["ssh-keygen", "-lf", "-"], input=best[0] + "\n", capture_output=True, text=True,
+                           timeout=10)
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+    f = r.stdout.split()
+    return f[1] if len(f) > 1 else ""
+
+
+def identity_changed(stderr):
+    return "IDENTIFICATION HAS CHANGED" in (stderr or "")
+
+
+def ssh_trust_keys(host, port, lines):
+    """Replace host's SSH identity in ~/.ssh/known_hosts with exactly these keys (the ones the user saw)."""
+    kh = os.path.expanduser("~/.ssh/known_hosts")
+    name = host if int(port) == 22 else "[%s]:%d" % (host, int(port))
+    subprocess.run(["ssh-keygen", "-R", name, "-f", kh], capture_output=True)
+    os.makedirs(os.path.dirname(kh), mode=0o700, exist_ok=True)
+    with open(kh, "a") as f:
+        for line in lines:
+            f.write("%s %s\n" % (name, line.split(" ", 1)[1]))
+    os.chmod(kh, 0o600)
+
+
+def confirm_changed_identity(login, confirm=None):
+    """A computer's SSH identity changed. Ask (confirm or HOSTKEY_CONFIRM) and trust the new one if allowed.
+    Raises DBError when it isn't trusted."""
+    host, port = ssh_target(login)
+    keys = ssh_host_keys(host, port)
+    fp = key_fingerprint(keys)
+    confirm = confirm or HOSTKEY_CONFIRM
+    if keys and fp and confirm and confirm(host, port, fp):
+        ssh_trust_keys(host, port, keys)
+        return
+    raise DBError("The SSH identity of %s changed since you last signed in to it%s. That's normal after its "
+                  "system was reinstalled; otherwise someone may be in between. If you reinstalled it, check the "
+                  "fingerprint on that computer (ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub) and try again."
+                  % (host, " (now %s)" % fp if fp else ""))
+
+
+def ssh_run(login, command, timeout=120, _retry=True):
     """Run a command on another computer through its normal SSH login (e.g. alex@192.168.1.20)."""
     env = dict(os.environ, SSH_ASKPASS="/usr/bin/pairdesk", SSH_ASKPASS_REQUIRE="force")
     cmd = ["ssh"] + ssh_ctl_opts() + ["-o", "ConnectTimeout=10", "-o", "StrictHostKeyChecking=ask",
@@ -1120,6 +1207,9 @@ def ssh_run(login, command, timeout=120):
         r = subprocess.run(cmd, env=env, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=timeout)
     except subprocess.TimeoutExpired:
         raise DBError("%s didn't answer over SSH in time." % login)
+    if r.returncode == 255 and identity_changed(r.stderr) and _retry:
+        confirm_changed_identity(login)
+        return ssh_run(login, command, timeout, _retry=False)
     if r.returncode == 255:
         err = (r.stderr.strip().splitlines() or ["no reply"])[-1]
         why = ("the password or user name wasn't accepted" if "Permission denied" in err else
@@ -1985,6 +2075,10 @@ def client_pair_code(address, code, log=print, host_name=None):
     kh_set(alias, hk)
     c = load_config()
     old = c["peers"].get(peer, {})
+    for other in [n for n, q in c["peers"].items() if n != peer and q.get("host") == host
+                  and int(q.get("port", LINK_PORT)) == int(port)]:
+        del c["peers"][other]          # the computer at this address was paired before under another name
+        log("Removed the old pairing %s: %s now answers at %s." % (other, peer, host))
     c["peers"][peer] = {
         "host": host, "user": rep.get("user", user), "port": port, "slot": rep["slot"], "rusb": rep["rusb"],
         "rsock": rep["rsock"], "link": True, "rdp_user": old.get("rdp_user", rep.get("user", user)),
@@ -2038,6 +2132,9 @@ def move_peer(name, ip, log=print):
         p.setdefault("host_name", p["host"])
     old, p["host"] = p["host"], ip
     save_config(c)
+    old_alias = _alias(old, port)
+    if not any(_alias(q["host"], q.get("port", LINK_PORT)) == old_alias for q in c["peers"].values()):
+        _edit_lines(known_hosts(), lambda l: l.split(" ", 1)[0] != old_alias)
     log("%s is now at %s (was %s)." % (name, ip, old))
     return True
 
@@ -2076,9 +2173,9 @@ def forget_peer(name, outgoing=True):
     if not outgoing:
         ak_set(name, None)
     elif p and p.get("host"):
-        port = int(p.get("port", 22))
-        alias = p["host"] if port == 22 else "[%s]:%d" % (p["host"], port)
-        _edit_lines(known_hosts(), lambda l: l.split(" ", 1)[0] != alias)
+        alias = _alias(p["host"], p.get("port", LINK_PORT))
+        if not any(_alias(q["host"], q.get("port", LINK_PORT)) == alias for q in c["peers"].values()):
+            _edit_lines(known_hosts(), lambda l: l.split(" ", 1)[0] != alias)
 
 
 def paired_computers():
@@ -2649,9 +2746,9 @@ class Session:
         else:   # through the link: the link already authenticated the computer
             target = ["/v:127.0.0.1:%d" % self.lrdp, "/cert:ignore" if ver == 3 else "/cert-ignore"]
         args = target + ["/u:" + self.p.get("rdp_user", self.p["user"]),
-                         "/p:" + password, "/t:PairDesk - " + self.name, "/dynamic-resolution",
-                         "+auto-reconnect", "/auto-reconnect-max-retries:60", "/gfx",
-                         ]
+                         "/p:" + password, "/t:PairDesk - " + self.name, "/dynamic-resolution", "/gfx",
+                         ]   # no FreeRDP auto-reconnect: it took the session back from someone signing in at
+        # the other screen. PairDesk opens the desktop again itself, only after a real drop (_watch_rdp).
         if embed:      # inside PairDesk's window: its toolbar does full screen, USB, camera, ...
             args += ["/parent-window:%d" % embed[0], "/size:%dx%d" % (embed[1], embed[2]), "-toggle-fullscreen"]
         else:          # FreeRDP's own window, with its bar: minimize, full screen on/off, close
@@ -2872,6 +2969,7 @@ class Session:
                 self.disconnect()
                 return
             self._set("reconnecting")
+            self.link_lost_at = time.time()
             self.log("Connection to %s lost; reconnecting ..." % self.name)
             delay = 2.0
             while not self.closing:
@@ -2894,16 +2992,64 @@ class Session:
                     time.sleep(delay)
                     delay = min(delay * 1.5, 15)
 
+    USER_CLOSED = (0, 11, 12)   # FreeRDP: window closed here, disconnected or signed out by the user
+    desktop_end = None          # why the desktop ended by itself: "signed_in" or "ended_there" (for the app)
+    link_lost_at = 0.0
+
     def _watch_rdp(self, cb):
+        """Wait for the desktop view to close. After a real connection drop it is opened again once the link
+        is back; when the other computer ended the session (e.g. someone signed in at its screen and chose to
+        end the remote session), it stays closed, so the session there isn't taken back."""
         self._on_desktop_exit = cb
-        p = self.rdp
-        p.wait()
-        err = p.stderr.read() if p.stderr else ""
-        if err:
-            flog("[%s] desktop exit %s: %s" % (self.name, p.returncode, err[-600:]))
-        if p is not self.rdp or getattr(self, "reopening", False):
-            return                       # replaced by reopen_desktop(): the session goes on
-        cb(p.returncode, err)
+        while True:
+            p = self.rdp
+            p.wait()
+            err = p.stderr.read() if p.stderr else ""
+            if err:
+                flog("[%s] desktop exit %s: %s" % (self.name, p.returncode, err[-600:]))
+            if p is not self.rdp or getattr(self, "reopening", False):
+                return                       # replaced by reopen_desktop(): the session goes on
+            if self.closing or p.returncode in self.USER_CLOSED or not self._desktop_dropped() \
+                    or not self._reopen_after_drop():
+                cb(p.returncode, err)
+                return
+
+    def _desktop_dropped(self):
+        """After the desktop closed by itself: True when the connection dropped, False when the other computer
+        ended the session on purpose (desktop_end says why)."""
+        if time.time() - self.link_lost_at < 90:
+            return True
+        try:
+            info = self.call("info")
+        except DBError:
+            return True                      # the link is down too
+        self.info = info
+        self.desktop_end = "signed_in" if info.get("rdp_conflict") == "signed_in" else "ended_there"
+        return False
+
+    def _reopen_after_drop(self, wait=600, pause=3):
+        """Open the desktop again once the link is back, unless someone is now signed in at the other screen."""
+        pw = getattr(self, "desktop_password", None)
+        if pw is None:
+            return False
+        self.log("The desktop of %s dropped with the connection; it opens again when the connection is back ..."
+                 % self.name)
+        end = time.time() + wait
+        while time.time() < end and not self.closing:
+            if self.state == "connected" and self.alive():
+                try:
+                    info = self.call("info")
+                except DBError:
+                    time.sleep(pause)
+                    continue
+                if info.get("rdp_conflict") == "signed_in":
+                    self.desktop_end = "signed_in"
+                    return False
+                self.start_desktop(pw, self.opts)
+                self.log("Desktop of %s opened again." % self.name)
+                return True
+            time.sleep(pause)
+        return False
 
     def reopen_desktop(self, opts):
         """Apply changed sound or microphone choices: open the desktop view again (the remote session itself

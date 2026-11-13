@@ -2,7 +2,7 @@
 title: PAIRDESK-UNINSTALL
 section: 8
 header: System Administration
-footer: PairDesk 2.9.2
+footer: PairDesk 2.9.3
 date: November 2026
 ---
 

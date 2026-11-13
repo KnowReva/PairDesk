@@ -606,6 +606,14 @@ def term_progress(line):
         print("    " + line.strip()[:110])
 
 
+def cli_confirm_identity(host, port, fp):
+    """In a terminal: trust a computer's changed SSH identity?"""
+    print("The SSH identity of %s changed since you last signed in to it (new fingerprint %s).\n"
+          "That's normal after its system was reinstalled; otherwise someone may be in between.\n"
+          "To compare, run on that computer: ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub" % (host, fp))
+    return input("Trust the new identity? [y/N] ").strip().lower() in ("y", "yes")
+
+
 def cli(argv):
     cmd, a = argv[0], argv[1:]
     C.TERMINAL = sys.stdin.isatty() or os.path.exists("/dev/tty") and bool(os.environ.get("SSH_TTY"))
@@ -699,8 +707,16 @@ def cli(argv):
             i = a.index("--ssh")
             login = a[i + 1] if len(a) > i + 1 and not a[i + 1].startswith("-") else "%s@%s" % (r["user"], r["host"])
             print("Signing in to %s over SSH to pair (it asks for that computer's password)." % login)
-            p = subprocess.run(["ssh", "-o", "ConnectTimeout=10", login, "pairdesk pair-code --plain --turn-on"],
-                               stdout=subprocess.PIPE, text=True)
+
+            def via_ssh():
+                return subprocess.run(["ssh", "-o", "ConnectTimeout=10", login, "pairdesk pair-code --plain --turn-on"],
+                                      stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            p = via_ssh()
+            if p.returncode == 255 and C.identity_changed(p.stderr):    # e.g. that computer was reinstalled
+                C.confirm_changed_identity(login, confirm=cli_confirm_identity)
+                p = via_ssh()
+            if p.returncode == 255 and p.stderr:
+                sys.stderr.write(p.stderr)
             m = __import__("re").search(r"\b[%s]{4}(?:-[%s]{4}){3}\b" % (C.CODE_ALPHABET, C.CODE_ALPHABET), p.stdout)
             if not m:
                 raise C.DBError("Couldn't sign in to %s over SSH (see above)." % login if p.returncode == 255 else
@@ -888,6 +904,8 @@ def cli(argv):
             pass
         finally:
             s.disconnect()
+        if s.desktop_end:
+            print(C.desktop_end_text(s.desktop_end, s.name))
         return
     print(__doc__)
 
@@ -1501,6 +1519,7 @@ def gui(auto_connect=None):
     class App(Gtk.Window):
         def __init__(self, auto_connect=None):
             super().__init__(title="PairDesk")
+            C.HOSTKEY_CONFIRM = self.confirm_new_identity
             apply_theme(C.load_config())
             try:   # fit the screen: 90 % of the work area, at most 860 x 720
                 disp = Gdk.Display.get_default()
@@ -3108,6 +3127,8 @@ def gui(auto_connect=None):
                             if KR["Secret"]:
                                 KR["Secret"].password_clear_sync(KR["SCHEMA"], {"peer": n}, None)
                             self.error("The desktop login on %s failed. Check the user name and password." % n)
+                    if s.desktop_end:
+                        self.notice("Desktop of %s closed" % n, C.desktop_end_text(s.desktop_end, n))
                     self.conn_btn.set_sensitive(False)
                     bg(s.disconnect, lambda _r: self.end_session())
                 GLib.idle_add(ui)
@@ -3282,6 +3303,16 @@ def gui(auto_connect=None):
             GLib.idle_add(go)
             ev.wait()
             return res[0]
+
+        def confirm_new_identity(self, host, port, fp):
+            """From a background thread: trust a computer's changed SSH identity (e.g. it was reinstalled)?"""
+            r = self.choose("%s has a new identity" % host,
+                            "Its SSH key changed since you last signed in to it. That's normal after its system was "
+                            "reinstalled. If you didn't reinstall it, someone may be in between: press Cancel.\n\n"
+                            "New fingerprint: %s\n\nTo compare, run this on that computer:\n"
+                            "ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub" % fp,
+                            [("Cancel", 0), ("Trust the new identity", 1)], kind=Gtk.MessageType.WARNING)
+            return r == 1
 
         def choose(self, title, text, buttons, kind=Gtk.MessageType.QUESTION, markup=False):
             """A dialog with buttons [(label, response)]; the last one is the main one. Returns the response."""

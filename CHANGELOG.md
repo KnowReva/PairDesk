@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.9.3 (2026-11-13)
+- Fixed: signing in at the screen of a computer you're connected to (and choosing to end the remote session)
+  didn't work: the desktop view reconnected at once and took the session back. The view no longer reconnects
+  by itself. PairDesk opens it again only after a real connection drop, and never when that computer ended
+  the session or someone is now signed in at its screen; it says so instead.
+- Fixed: pairing over SSH with a computer that was reinstalled at the same address stopped with "the
+  computer's identity wasn't confirmed". PairDesk now shows the new SSH fingerprint and asks; only after
+  **Trust the new identity** (or "y" in a terminal) it replaces the old one, with exactly the key shown.
+- A new pairing replaces older pairings at the same address and port (e.g. the same computer, reinstalled
+  under another name), instead of listing both.
+- Forgetting a pairing saved without a port now removes its identity line (it looked at port 22, not the link
+  port), and moving a pairing to a new address drops the old address's line.
+
 ## 2.9.2 (2026-11-07)
 - Fixed: pressing **Cancel** in the sign-out notice still signed the session out when the countdown ended. The
   notice and PairDesk's link kept their note in different folders, so the link never saw Cancel (and the

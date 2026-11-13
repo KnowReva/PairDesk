@@ -2,7 +2,7 @@
 title: PAIRDESK-REMOTE
 section: 1
 header: User Commands
-footer: PairDesk 2.9.2
+footer: PairDesk 2.9.3
 date: November 2026
 ---
 

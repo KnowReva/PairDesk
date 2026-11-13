@@ -75,6 +75,11 @@
     <display_length compare="ge">720</display_length>
   </requires>
   <releases>
+    <release version="2.9.3" date="2026-11-13">
+      <description>
+        <p>Signing in at the screen of a connected computer works again; pairing with a reinstalled computer asks to trust its new identity.</p>
+      </description>
+    </release>
     <release version="2.9.2" date="2026-11-07">
       <description>
         <p>The sign-out notice respects Cancel and says so on the connecting computer.</p>

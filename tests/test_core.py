@@ -539,3 +539,233 @@ class Knock(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Reinstalled(unittest.TestCase):
+    """A computer reinstalled at the same address: its new SSH identity is trusted only after asking, and
+    a new pairing replaces old ones at that address."""
+
+    CHANGED = ("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n"
+               "@    WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!     @\n"
+               "Offending ECDSA key in /home/u/.ssh/known_hosts:3\nHost key verification failed.\n")
+
+    def setUp(self):
+        self.t = tempfile.TemporaryDirectory()
+        os.environ["HOME"] = self.t.name
+        os.makedirs(os.path.join(self.t.name, ".ssh"))
+        self.kh = os.path.join(self.t.name, ".ssh", "known_hosts")
+        with open(self.kh, "w") as f:
+            f.write("other.lan ssh-ed25519 AAAAkeep\n192.168.1.20 ssh-ed25519 AAAAold\n")
+        self.calls = []
+        self.ssh_results = []
+
+    def tearDown(self):
+        C.HOSTKEY_CONFIRM = None
+        self.t.cleanup()
+
+    def fake_run(self, cmd, **kw):
+        self.calls.append(cmd)
+        if cmd[0] == "ssh" and cmd[1] == "-G":
+            return subprocess.CompletedProcess(cmd, 0, "user alex\nhostname 192.168.1.20\nport 22\n", "")
+        if cmd[0] == "ssh-keyscan":
+            return subprocess.CompletedProcess(cmd, 0, "# banner\n192.168.1.20 ssh-ed25519 AAAAnew\n"
+                                                       "192.168.1.20 ecdsa-sha2-nistp256 AAAAecdsa\n", "")
+        if cmd[:2] == ["ssh-keygen", "-lf"]:
+            self.assertIn("ssh-ed25519 AAAAnew", kw["input"])
+            return subprocess.CompletedProcess(cmd, 0, "256 SHA256:NEWFP 192.168.1.20 (ED25519)\n", "")
+        if cmd[:2] == ["ssh-keygen", "-R"]:
+            lines = [x for x in open(cmd[4]).read().splitlines() if x.split(" ", 1)[0] != cmd[2]]
+            open(cmd[4], "w").write("\n".join(lines) + "\n")
+            return subprocess.CompletedProcess(cmd, 0, "", "")
+        if cmd[0] == "ssh":
+            return self.ssh_results.pop(0)
+        raise AssertionError(cmd)
+
+    def ssh(self, code, out="", err=""):
+        return subprocess.CompletedProcess(["ssh"], code, out, err)
+
+    def test_changed_identity_trusted_after_yes_then_retried(self):
+        asked = []
+        C.HOSTKEY_CONFIRM = lambda h, p, fp: asked.append((h, p, fp)) or True
+        self.ssh_results = [self.ssh(255, err=self.CHANGED), self.ssh(0, out="K7QM-4XTR-9PEH-2HVA\n")]
+        with mock.patch.object(C.subprocess, "run", side_effect=self.fake_run):
+            self.assertEqual(C.ssh_get_code("alex@192.168.1.20"), "K7QM-4XTR-9PEH-2HVA")
+        self.assertEqual(asked, [("192.168.1.20", 22, "SHA256:NEWFP")])
+        lines = open(self.kh).read().splitlines()
+        self.assertIn("other.lan ssh-ed25519 AAAAkeep", lines)                     # other computers untouched
+        self.assertNotIn("192.168.1.20 ssh-ed25519 AAAAold", lines)
+        self.assertIn("192.168.1.20 ssh-ed25519 AAAAnew", lines)                   # exactly the keys shown
+        self.assertEqual(oct(os.stat(self.kh).st_mode & 0o777), "0o600")
+
+    def test_changed_identity_refused_keeps_the_old_one(self):
+        C.HOSTKEY_CONFIRM = lambda h, p, fp: False
+        self.ssh_results = [self.ssh(255, err=self.CHANGED)]
+        with mock.patch.object(C.subprocess, "run", side_effect=self.fake_run):
+            with self.assertRaises(C.DBError) as e:
+                C.ssh_get_code("alex@192.168.1.20")
+        self.assertIn("SHA256:NEWFP", str(e.exception))
+        self.assertIn("192.168.1.20 ssh-ed25519 AAAAold", open(self.kh).read())
+        self.assertFalse(any(c[:2] == ["ssh-keygen", "-R"] for c in self.calls))
+
+    def test_without_anyone_to_ask_it_stops(self):
+        self.ssh_results = [self.ssh(255, err=self.CHANGED)]
+        with mock.patch.object(C.subprocess, "run", side_effect=self.fake_run):
+            with self.assertRaises(C.DBError) as e:
+                C.ssh_run("alex@192.168.1.20", "true")
+        self.assertIn("reinstalled", str(e.exception))
+        self.assertIn("192.168.1.20 ssh-ed25519 AAAAold", open(self.kh).read())
+
+    def test_asks_only_once(self):
+        asked = []
+        C.HOSTKEY_CONFIRM = lambda h, p, fp: asked.append(fp) or True
+        self.ssh_results = [self.ssh(255, err=self.CHANGED), self.ssh(255, err=self.CHANGED)]
+        with mock.patch.object(C.subprocess, "run", side_effect=self.fake_run):
+            with self.assertRaises(C.DBError) as e:
+                C.ssh_run("alex@192.168.1.20", "true")
+        self.assertEqual(len(asked), 1)
+        self.assertIn("identity wasn't confirmed", str(e.exception))
+
+    def test_other_ports_are_written_in_brackets(self):
+        with mock.patch.object(C.subprocess, "run", side_effect=self.fake_run):
+            C.ssh_trust_keys("192.168.1.20", 2222, ["[192.168.1.20]:2222 ssh-ed25519 AAAAnew"])
+        self.assertIn("[192.168.1.20]:2222 ssh-ed25519 AAAAnew", open(self.kh).read())
+        self.assertIn("192.168.1.20 ssh-ed25519 AAAAold", open(self.kh).read())    # port 22 entry stays
+
+    def test_new_pairing_replaces_old_pairings_at_the_same_address(self):
+        code = "K7QM-4XTR-9PEH-2HVA"
+        cfg = {"peers": {"office-old": {"host": "10.0.0.5", "port": 4722, "user": "a"},
+                         "laptop": {"host": "10.0.0.7", "port": 4722, "user": "b"},
+                         "office-ssh": {"host": "10.0.0.5", "port": 22, "user": "c"}}, "incoming": {}}
+        lkh = os.path.join(self.t.name, "pd_known_hosts")
+        open(lkh, "w").write("[10.0.0.5]:4722 ssh-ed25519 AAAAold\n")
+        pub = "ssh-ed25519 CLIENT"
+
+        def pair_call(address, what, req, hk):
+            return {"name": "office-new", "user": "a", "slot": 1, "rusb": 0, "rsock": "s",
+                    "proof": C._proof(code, "server", hk, pub)}, None
+
+        scan = subprocess.CompletedProcess([], 0, "[10.0.0.5]:4722 ssh-ed25519 AAAAnew\n", "")
+        said = []
+        with mock.patch.multiple(C, load_config=lambda: cfg, save_config=lambda c: None, known_hosts=lambda: lkh,
+                                 to_ip=lambda h, p=None: h, ensure_key=lambda: pub, _pair_call=pair_call,
+                                 forget_knock_key=lambda h, p: None, hostname=lambda: "me",
+                                 getpass_user=lambda: "me"), \
+                mock.patch.object(C.subprocess, "run", return_value=scan):
+            self.assertEqual(C.client_pair_code("a@10.0.0.5:4722", code, log=said.append), "office-new")
+        self.assertEqual(sorted(cfg["peers"]), ["laptop", "office-new", "office-ssh"])   # other port stays
+        self.assertTrue(any("office-old" in m for m in said))
+        self.assertEqual(C_kh(lkh), ["[10.0.0.5]:4722 ssh-ed25519 AAAAnew"])
+
+
+def C_kh(path):
+    return open(path).read().splitlines()
+
+
+class Forget(unittest.TestCase):
+    def test_forget_uses_the_link_port_and_keeps_shared_lines(self):
+        with tempfile.TemporaryDirectory() as t:
+            kh = os.path.join(t, "known_hosts")
+            open(kh, "w").write("[10.0.0.5]:4722 ssh-ed25519 A\n[10.0.0.6]:4722 ssh-ed25519 B\n")
+            cfg = {"peers": {"old": {"host": "10.0.0.5"}, "x": {"host": "10.0.0.6", "port": 4722},
+                             "y": {"host": "10.0.0.6", "port": 4722}}, "incoming": {}}
+            with mock.patch.multiple(C, load_config=lambda: cfg, save_config=lambda c: None, known_hosts=lambda: kh):
+                C.forget_peer("old")                  # no port saved: the link port, not 22
+                C.forget_peer("x")                    # y still uses 10.0.0.6: its line stays
+            self.assertEqual(open(kh).read(), "[10.0.0.6]:4722 ssh-ed25519 B\n")
+
+    def test_move_drops_the_old_address_line(self):
+        with tempfile.TemporaryDirectory() as t:
+            kh = os.path.join(t, "known_hosts")
+            open(kh, "w").write("[192.168.1.20]:4722 ssh-ed25519 AAAAgood\n")
+            cfg = {"peers": {"office-pc": {"host": "192.168.1.20", "port": 4722}}, "incoming": {}}
+            scan = subprocess.CompletedProcess([], 0, "[10.0.0.9]:4722 ssh-ed25519 AAAAgood\n", "")
+            env = mock.patch.multiple(C, load_config=lambda: cfg, save_config=lambda c: None, known_hosts=lambda: kh)
+            with env, mock.patch.object(C.subprocess, "run", return_value=scan):
+                self.assertTrue(C.move_peer("office-pc", "10.0.0.9", log=lambda m: None))
+            self.assertEqual(open(kh).read(), "[10.0.0.9]:4722 ssh-ed25519 AAAAgood\n")
+
+
+class FakeRdp:
+    def __init__(self, rc, err=""):
+        self.returncode, self.stderr = rc, io.StringIO(err)
+
+    def wait(self, *a):
+        return self.returncode
+
+    def poll(self):
+        return self.returncode
+
+
+class DesktopEndsThere(unittest.TestCase):
+    """The desktop view never takes a session back from someone signing in at the other screen: FreeRDP
+    doesn't reconnect by itself, and PairDesk opens it again only after a real connection drop."""
+
+    def session(self, rdps, infos, lost_at=0.0):
+        s = C.Session.__new__(C.Session)
+        s.name, s.closing, s.state, s.opts = "office-pc", False, "connected", {}
+        s.rdp, s.desktop_password, s.link_lost_at = rdps.pop(0), "pw", lost_at
+        s.started, s.calls = [], []
+
+        def call(what):
+            s.calls.append(what)
+            r = infos.pop(0)
+            if isinstance(r, Exception):
+                raise r
+            return r
+
+        def start_desktop(pw, opts):
+            s.started.append(pw)
+            s.rdp = rdps.pop(0)
+
+        s.call, s.start_desktop, s.alive, s.log = call, start_desktop, lambda: True, lambda m: None
+        return s
+
+    def run_watch(self, s):
+        ended = []
+        with mock.patch.object(C, "flog"), mock.patch.object(C.time, "sleep"):
+            s._watch_rdp(lambda rc, err: ended.append(rc))
+        return ended
+
+    def test_freerdp_does_not_reconnect_by_itself(self):
+        s = C.Session.__new__(C.Session)
+        s.p, s.lrdp, s.name = {"user": "alex", "rdp_user": "alex"}, 45000, "office-pc"
+        with mock.patch.object(C, "rdp_client", return_value=("/usr/bin/xfreerdp3", 3)):
+            a = s.rdp_cmd("pw", {}, None, None)[2]
+        self.assertFalse(any("auto-reconnect" in x for x in a))
+
+    def test_closed_here_just_ends(self):
+        s = self.session([FakeRdp(0)], [])
+        self.assertEqual(self.run_watch(s), [0])
+        self.assertEqual((s.calls, s.started, s.desktop_end), ([], [], None))
+
+    def test_someone_signed_in_at_the_screen_keeps_it(self):
+        s = self.session([FakeRdp(131)], [{"rdp_conflict": "signed_in"}])
+        self.assertEqual(self.run_watch(s), [131])
+        self.assertEqual((s.started, s.desktop_end), ([], "signed_in"))
+        self.assertIn("handed to them", C.desktop_end_text(s.desktop_end, s.name))
+
+    def test_ended_there_with_the_link_up_is_not_reopened(self):
+        s = self.session([FakeRdp(1)], [{"rdp_conflict": None}])
+        self.assertEqual(self.run_watch(s), [1])
+        self.assertEqual((s.started, s.desktop_end), ([], "ended_there"))
+
+    def test_a_real_drop_reopens_once_the_link_is_back(self):
+        s = self.session([FakeRdp(131), FakeRdp(0)], [{"rdp_conflict": None}], lost_at=C.time.time())
+        self.assertEqual(self.run_watch(s), [0])          # reopened, then closed here
+        self.assertEqual((s.started, s.desktop_end), (["pw"], None))
+
+    def test_link_down_counts_as_a_drop(self):
+        s = self.session([FakeRdp(131), FakeRdp(0)], [C.DBError("no link"), {"rdp_conflict": None}])
+        self.assertEqual(self.run_watch(s), [0])
+        self.assertEqual(s.started, ["pw"])
+
+    def test_after_a_drop_someone_at_the_screen_wins(self):
+        s = self.session([FakeRdp(131)], [{"rdp_conflict": "signed_in"}], lost_at=C.time.time())
+        self.assertEqual(self.run_watch(s), [131])
+        self.assertEqual((s.started, s.desktop_end), ([], "signed_in"))
+
+    def test_disconnecting_meanwhile_ends_it(self):
+        s = self.session([FakeRdp(131)], [], lost_at=C.time.time())
+        s.closing = True
+        self.assertEqual(self.run_watch(s), [131])
+        self.assertEqual(s.started, [])

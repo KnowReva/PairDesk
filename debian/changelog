@@ -1,3 +1,12 @@
+pairdesk (2.9.3-1) unstable; urgency=medium
+
+  * Desktop view no longer takes a session back from someone signing in at the
+    other screen; reopened only after a real connection drop.
+  * Pairing over SSH with a reinstalled computer: asks to trust its new identity.
+  * A new pairing replaces older pairings at the same address.
+
+ -- KnowReva <rahul.thakar@knowreva.com>  Fri, 13 Nov 2026 15:50:00 -0500
+
 pairdesk (2.9.2-1) unstable; urgency=medium
 
   * Sign-out notice: Cancel is respected; Sign out now connects within seconds.
