@@ -33,3 +33,38 @@ Description: use another computer's desktop with your USB devices and folders
  needed, after PairDesk explains what they are for; pairdesk-uninstall
  removes them again.
 
+Package: pairdesk
+Architecture: all
+Version: 2.9.3-1
+Priority: optional
+Section: net
+Maintainer: KnowReva <rahul.thakar@knowreva.com>
+Installed-Size: 558
+Depends: python3 (>= 3.9), python3-gi, gir1.2-gtk-3.0, openssh-client, pkexec | policykit-1
+Suggests: freerdp3-x11 | freerdp-x11 | freerdp2-x11, sshfs, openssh-server, openssh-sftp-server, usbip | linux-tools-generic, sudo, avahi-utils, gir1.2-secret-1, xrdp, pipewire-module-xrdp | pulseaudio-module-xrdp, gnome-remote-desktop, nftables | iptables, ethtool
+Conflicts: deskbridge
+Replaces: deskbridge
+Filename: pool/main/pairdesk_2.9.3-1_all.deb
+Size: 147248
+MD5sum: 99fc8eb27593bacb8f00066cdaf5dc73
+SHA1: ecfb4d57bfd2c7d25c9e3cdf673a1c32f2e2206a
+SHA256: 14c82f33a0e4ade6afb6441f8818a9735ceb9386530c8718faa48175216bcfb4
+SHA512: 6547009fc7d9973fd90522ea661ad75428bb137f88a52efa560eaebd3db7c9bdc7122f3f4412a63454d7451f577702a22823ea3eeeeebeb50d7071a40c4071ad
+Homepage: https://pairdesk.knowreva.com
+Description: use another computer's desktop with your USB devices and folders
+ PairDesk connects Linux computers on your network: full remote desktop
+ with clipboard, sound and microphone, plus USB device sharing in both
+ directions (security keys such as YubiKey, webcams, USB drives), and
+ shared folders in both directions.
+ .
+ One package on every computer; a switch turns remote access on or off.
+ Connections use PairDesk's own encrypted link service: it runs as the
+ user on its own port (default 4722), is open only while remote access is
+ on, accepts only computers paired with a one-time code, and carries the
+ desktop, USB devices and folders over one connection.
+ .
+ Only Python, GTK and the SSH client are required. The viewer, folder
+ sharing, SSH server, USB sharing and other add-ons are installed when first
+ needed, after PairDesk explains what they are for; pairdesk-uninstall
+ removes them again.
+
