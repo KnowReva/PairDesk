@@ -1,114 +1,114 @@
 Architectures: amd64 arm64 armhf i386 riscv64 all
 Codename: stable
 Components: main
-Date: Fri, 13 Nov 2026 21:06:16 +0000
+Date: Sat, 14 Nov 2026 02:42:57 +0000
 Description: KnowReva software
 Label: KnowReva
 Origin: KnowReva
 Suite: stable
 MD5Sum:
- 052e422bdedd4effeacea8e08620423c              200 Release
- 574294436ba26ad12e099a54c7841e77             3738 main/binary-amd64/Packages
- 1620b63fed86ee5753f161a751f5e33d             1333 main/binary-amd64/Packages.gz
- 574294436ba26ad12e099a54c7841e77             3738 main/binary-arm64/Packages
- 1620b63fed86ee5753f161a751f5e33d             1333 main/binary-arm64/Packages.gz
- 574294436ba26ad12e099a54c7841e77             3738 main/binary-armhf/Packages
- 1620b63fed86ee5753f161a751f5e33d             1333 main/binary-armhf/Packages.gz
- 574294436ba26ad12e099a54c7841e77             3738 main/binary-i386/Packages
- 1620b63fed86ee5753f161a751f5e33d             1333 main/binary-i386/Packages.gz
- 574294436ba26ad12e099a54c7841e77             3738 main/binary-riscv64/Packages
- 1620b63fed86ee5753f161a751f5e33d             1333 main/binary-riscv64/Packages.gz
- 29d44b1b51363a235135f7ed9b489377             3852 main/dep11/Components-amd64.yml
- 09a1ab4843701b3a163cd9806c2b8e4f             1495 main/dep11/Components-amd64.yml.gz
- 29d44b1b51363a235135f7ed9b489377             3852 main/dep11/Components-arm64.yml
- 09a1ab4843701b3a163cd9806c2b8e4f             1495 main/dep11/Components-arm64.yml.gz
- 29d44b1b51363a235135f7ed9b489377             3852 main/dep11/Components-armhf.yml
- 09a1ab4843701b3a163cd9806c2b8e4f             1495 main/dep11/Components-armhf.yml.gz
- 29d44b1b51363a235135f7ed9b489377             3852 main/dep11/Components-i386.yml
- 09a1ab4843701b3a163cd9806c2b8e4f             1495 main/dep11/Components-i386.yml.gz
- 29d44b1b51363a235135f7ed9b489377             3852 main/dep11/Components-riscv64.yml
- 09a1ab4843701b3a163cd9806c2b8e4f             1495 main/dep11/Components-riscv64.yml.gz
+ e83fd51529c9961500c89c30bae9f6b6              200 Release
+ 19b2084e566a8a6d692f6e74aadeca2f             5607 main/binary-amd64/Packages
+ 5b4b466e77216297313d3596767922f0             1547 main/binary-amd64/Packages.gz
+ 19b2084e566a8a6d692f6e74aadeca2f             5607 main/binary-arm64/Packages
+ 5b4b466e77216297313d3596767922f0             1547 main/binary-arm64/Packages.gz
+ 19b2084e566a8a6d692f6e74aadeca2f             5607 main/binary-armhf/Packages
+ 5b4b466e77216297313d3596767922f0             1547 main/binary-armhf/Packages.gz
+ 19b2084e566a8a6d692f6e74aadeca2f             5607 main/binary-i386/Packages
+ 5b4b466e77216297313d3596767922f0             1547 main/binary-i386/Packages.gz
+ 19b2084e566a8a6d692f6e74aadeca2f             5607 main/binary-riscv64/Packages
+ 5b4b466e77216297313d3596767922f0             1547 main/binary-riscv64/Packages.gz
+ 0c1aa22d9bd10b6be78449344f3f3995             3875 main/dep11/Components-amd64.yml
+ 54f7c64a91caf755424c1b65b45e6dd5             1493 main/dep11/Components-amd64.yml.gz
+ 0c1aa22d9bd10b6be78449344f3f3995             3875 main/dep11/Components-arm64.yml
+ 54f7c64a91caf755424c1b65b45e6dd5             1493 main/dep11/Components-arm64.yml.gz
+ 0c1aa22d9bd10b6be78449344f3f3995             3875 main/dep11/Components-armhf.yml
+ 54f7c64a91caf755424c1b65b45e6dd5             1493 main/dep11/Components-armhf.yml.gz
+ 0c1aa22d9bd10b6be78449344f3f3995             3875 main/dep11/Components-i386.yml
+ 54f7c64a91caf755424c1b65b45e6dd5             1493 main/dep11/Components-i386.yml.gz
+ 0c1aa22d9bd10b6be78449344f3f3995             3875 main/dep11/Components-riscv64.yml
+ 54f7c64a91caf755424c1b65b45e6dd5             1493 main/dep11/Components-riscv64.yml.gz
  6044c676255a08e9a8b58e0cf3856574             2874 main/dep11/icons-128x128.tar.gz
  579dd31579d749cb79587f37790d0e08             5196 main/dep11/icons-128x128@2.tar.gz
  441f02ccd89303f8c38c015834ddd153             1489 main/dep11/icons-48x48.tar.gz
  b330c8713c292e1864bc89aab59cca2c             1563 main/dep11/icons-64x64.tar.gz
  6504706bc38badbb6f6eca8cdbc528ad             2795 main/dep11/icons-64x64@2.tar.gz
 SHA1:
- d04a210dad6aa825a35e11691f3eb696918d389b              200 Release
- 663a0a85d60f9240388694d961bc06e965c6a239             3738 main/binary-amd64/Packages
- 06d17bc152d9cdb17b1888796b94829608d47efc             1333 main/binary-amd64/Packages.gz
- 663a0a85d60f9240388694d961bc06e965c6a239             3738 main/binary-arm64/Packages
- 06d17bc152d9cdb17b1888796b94829608d47efc             1333 main/binary-arm64/Packages.gz
- 663a0a85d60f9240388694d961bc06e965c6a239             3738 main/binary-armhf/Packages
- 06d17bc152d9cdb17b1888796b94829608d47efc             1333 main/binary-armhf/Packages.gz
- 663a0a85d60f9240388694d961bc06e965c6a239             3738 main/binary-i386/Packages
- 06d17bc152d9cdb17b1888796b94829608d47efc             1333 main/binary-i386/Packages.gz
- 663a0a85d60f9240388694d961bc06e965c6a239             3738 main/binary-riscv64/Packages
- 06d17bc152d9cdb17b1888796b94829608d47efc             1333 main/binary-riscv64/Packages.gz
- fc4d0ae6ffb5d8dd7d81c6b1bf016539bdd70fbf             3852 main/dep11/Components-amd64.yml
- 9f46a3437bda965e788d4c72027b8ad9d7d7d9b0             1495 main/dep11/Components-amd64.yml.gz
- fc4d0ae6ffb5d8dd7d81c6b1bf016539bdd70fbf             3852 main/dep11/Components-arm64.yml
- 9f46a3437bda965e788d4c72027b8ad9d7d7d9b0             1495 main/dep11/Components-arm64.yml.gz
- fc4d0ae6ffb5d8dd7d81c6b1bf016539bdd70fbf             3852 main/dep11/Components-armhf.yml
- 9f46a3437bda965e788d4c72027b8ad9d7d7d9b0             1495 main/dep11/Components-armhf.yml.gz
- fc4d0ae6ffb5d8dd7d81c6b1bf016539bdd70fbf             3852 main/dep11/Components-i386.yml
- 9f46a3437bda965e788d4c72027b8ad9d7d7d9b0             1495 main/dep11/Components-i386.yml.gz
- fc4d0ae6ffb5d8dd7d81c6b1bf016539bdd70fbf             3852 main/dep11/Components-riscv64.yml
- 9f46a3437bda965e788d4c72027b8ad9d7d7d9b0             1495 main/dep11/Components-riscv64.yml.gz
+ 7ac47982f09b70eb9796f6d0553d3f1e2f00bdbe              200 Release
+ a4d7a62e831898613c0a56207192542b6f683fe5             5607 main/binary-amd64/Packages
+ 7d29231b2d2007bd9012432c1574ab8363bf9155             1547 main/binary-amd64/Packages.gz
+ a4d7a62e831898613c0a56207192542b6f683fe5             5607 main/binary-arm64/Packages
+ 7d29231b2d2007bd9012432c1574ab8363bf9155             1547 main/binary-arm64/Packages.gz
+ a4d7a62e831898613c0a56207192542b6f683fe5             5607 main/binary-armhf/Packages
+ 7d29231b2d2007bd9012432c1574ab8363bf9155             1547 main/binary-armhf/Packages.gz
+ a4d7a62e831898613c0a56207192542b6f683fe5             5607 main/binary-i386/Packages
+ 7d29231b2d2007bd9012432c1574ab8363bf9155             1547 main/binary-i386/Packages.gz
+ a4d7a62e831898613c0a56207192542b6f683fe5             5607 main/binary-riscv64/Packages
+ 7d29231b2d2007bd9012432c1574ab8363bf9155             1547 main/binary-riscv64/Packages.gz
+ 8e3e0fa334ff83339f4dfb35b0824249548554bc             3875 main/dep11/Components-amd64.yml
+ e71fc2064db1b7f18d278083625b1b0ddd41b782             1493 main/dep11/Components-amd64.yml.gz
+ 8e3e0fa334ff83339f4dfb35b0824249548554bc             3875 main/dep11/Components-arm64.yml
+ e71fc2064db1b7f18d278083625b1b0ddd41b782             1493 main/dep11/Components-arm64.yml.gz
+ 8e3e0fa334ff83339f4dfb35b0824249548554bc             3875 main/dep11/Components-armhf.yml
+ e71fc2064db1b7f18d278083625b1b0ddd41b782             1493 main/dep11/Components-armhf.yml.gz
+ 8e3e0fa334ff83339f4dfb35b0824249548554bc             3875 main/dep11/Components-i386.yml
+ e71fc2064db1b7f18d278083625b1b0ddd41b782             1493 main/dep11/Components-i386.yml.gz
+ 8e3e0fa334ff83339f4dfb35b0824249548554bc             3875 main/dep11/Components-riscv64.yml
+ e71fc2064db1b7f18d278083625b1b0ddd41b782             1493 main/dep11/Components-riscv64.yml.gz
  22c5b7e8eb2b1fad1417fda86b441a0fe9c1b5b9             2874 main/dep11/icons-128x128.tar.gz
  f1b63042915089cd31b353141d5963f281629d88             5196 main/dep11/icons-128x128@2.tar.gz
  6bfec20e0c3f439d542a1cfb1b8ca3c928c0be45             1489 main/dep11/icons-48x48.tar.gz
  e0b1f42fffce05b238e9bab289496cbba383b02a             1563 main/dep11/icons-64x64.tar.gz
  14b8304b8f362ffd2665f29c6ccf3c1b5aed37a1             2795 main/dep11/icons-64x64@2.tar.gz
 SHA256:
- 6adce07ef0a571827687faddf72f0d7c2cc305cbcd5e12ea752cb798cf685f45              200 Release
- 6c71470dbee05ec6d43196424f6bd0b02e88c015ecf7f4050ce8db58e7fdb3c3             3738 main/binary-amd64/Packages
- 5170a4fd9f228e7c9a50221911caf9b01a2d07a85310ffee541f238602e9d3c0             1333 main/binary-amd64/Packages.gz
- 6c71470dbee05ec6d43196424f6bd0b02e88c015ecf7f4050ce8db58e7fdb3c3             3738 main/binary-arm64/Packages
- 5170a4fd9f228e7c9a50221911caf9b01a2d07a85310ffee541f238602e9d3c0             1333 main/binary-arm64/Packages.gz
- 6c71470dbee05ec6d43196424f6bd0b02e88c015ecf7f4050ce8db58e7fdb3c3             3738 main/binary-armhf/Packages
- 5170a4fd9f228e7c9a50221911caf9b01a2d07a85310ffee541f238602e9d3c0             1333 main/binary-armhf/Packages.gz
- 6c71470dbee05ec6d43196424f6bd0b02e88c015ecf7f4050ce8db58e7fdb3c3             3738 main/binary-i386/Packages
- 5170a4fd9f228e7c9a50221911caf9b01a2d07a85310ffee541f238602e9d3c0             1333 main/binary-i386/Packages.gz
- 6c71470dbee05ec6d43196424f6bd0b02e88c015ecf7f4050ce8db58e7fdb3c3             3738 main/binary-riscv64/Packages
- 5170a4fd9f228e7c9a50221911caf9b01a2d07a85310ffee541f238602e9d3c0             1333 main/binary-riscv64/Packages.gz
- d4c66e3ce7f7bf9fe20b45a667b740ca3981f3fad025fffb0da50d22e800aefe             3852 main/dep11/Components-amd64.yml
- 7a3da0b2d00659dd46cfa7e37e2489094321e5febee668dfa75a13b400f6f197             1495 main/dep11/Components-amd64.yml.gz
- d4c66e3ce7f7bf9fe20b45a667b740ca3981f3fad025fffb0da50d22e800aefe             3852 main/dep11/Components-arm64.yml
- 7a3da0b2d00659dd46cfa7e37e2489094321e5febee668dfa75a13b400f6f197             1495 main/dep11/Components-arm64.yml.gz
- d4c66e3ce7f7bf9fe20b45a667b740ca3981f3fad025fffb0da50d22e800aefe             3852 main/dep11/Components-armhf.yml
- 7a3da0b2d00659dd46cfa7e37e2489094321e5febee668dfa75a13b400f6f197             1495 main/dep11/Components-armhf.yml.gz
- d4c66e3ce7f7bf9fe20b45a667b740ca3981f3fad025fffb0da50d22e800aefe             3852 main/dep11/Components-i386.yml
- 7a3da0b2d00659dd46cfa7e37e2489094321e5febee668dfa75a13b400f6f197             1495 main/dep11/Components-i386.yml.gz
- d4c66e3ce7f7bf9fe20b45a667b740ca3981f3fad025fffb0da50d22e800aefe             3852 main/dep11/Components-riscv64.yml
- 7a3da0b2d00659dd46cfa7e37e2489094321e5febee668dfa75a13b400f6f197             1495 main/dep11/Components-riscv64.yml.gz
+ f9972231ace2143146eabd2dedc3da33d1bd762f72b9fc0d6673336dcf45f37a              200 Release
+ 8cc12f80abaa2217b9d81b26f744f6d9d89c5263c78ca68305d1850f474afa91             5607 main/binary-amd64/Packages
+ afac9062b983d9200506ed262676a56d0afbfa3fa7b25e5c744b4ff5ed923469             1547 main/binary-amd64/Packages.gz
+ 8cc12f80abaa2217b9d81b26f744f6d9d89c5263c78ca68305d1850f474afa91             5607 main/binary-arm64/Packages
+ afac9062b983d9200506ed262676a56d0afbfa3fa7b25e5c744b4ff5ed923469             1547 main/binary-arm64/Packages.gz
+ 8cc12f80abaa2217b9d81b26f744f6d9d89c5263c78ca68305d1850f474afa91             5607 main/binary-armhf/Packages
+ afac9062b983d9200506ed262676a56d0afbfa3fa7b25e5c744b4ff5ed923469             1547 main/binary-armhf/Packages.gz
+ 8cc12f80abaa2217b9d81b26f744f6d9d89c5263c78ca68305d1850f474afa91             5607 main/binary-i386/Packages
+ afac9062b983d9200506ed262676a56d0afbfa3fa7b25e5c744b4ff5ed923469             1547 main/binary-i386/Packages.gz
+ 8cc12f80abaa2217b9d81b26f744f6d9d89c5263c78ca68305d1850f474afa91             5607 main/binary-riscv64/Packages
+ afac9062b983d9200506ed262676a56d0afbfa3fa7b25e5c744b4ff5ed923469             1547 main/binary-riscv64/Packages.gz
+ 842c39bf49bba4572c0b41647e31cfdf51251b4d0057d40d72e04b736b23a132             3875 main/dep11/Components-amd64.yml
+ b00a18554ca36cdf7ca41fc39929d649513116db641bd314ea7af8af0b4b332f             1493 main/dep11/Components-amd64.yml.gz
+ 842c39bf49bba4572c0b41647e31cfdf51251b4d0057d40d72e04b736b23a132             3875 main/dep11/Components-arm64.yml
+ b00a18554ca36cdf7ca41fc39929d649513116db641bd314ea7af8af0b4b332f             1493 main/dep11/Components-arm64.yml.gz
+ 842c39bf49bba4572c0b41647e31cfdf51251b4d0057d40d72e04b736b23a132             3875 main/dep11/Components-armhf.yml
+ b00a18554ca36cdf7ca41fc39929d649513116db641bd314ea7af8af0b4b332f             1493 main/dep11/Components-armhf.yml.gz
+ 842c39bf49bba4572c0b41647e31cfdf51251b4d0057d40d72e04b736b23a132             3875 main/dep11/Components-i386.yml
+ b00a18554ca36cdf7ca41fc39929d649513116db641bd314ea7af8af0b4b332f             1493 main/dep11/Components-i386.yml.gz
+ 842c39bf49bba4572c0b41647e31cfdf51251b4d0057d40d72e04b736b23a132             3875 main/dep11/Components-riscv64.yml
+ b00a18554ca36cdf7ca41fc39929d649513116db641bd314ea7af8af0b4b332f             1493 main/dep11/Components-riscv64.yml.gz
  7ecc85aa33b9cec83367242c61817b6b616ed0604a11a2aac1ae48b918d3c5f5             2874 main/dep11/icons-128x128.tar.gz
  2b9342bb8897d4436d5e7f674b44fc3ed23e5c1977977f9fa3e4f8db368918de             5196 main/dep11/icons-128x128@2.tar.gz
  96aa455d5eac96fab4aea58ddd547caef8d717587685bc02489fc6631dc0fa7d             1489 main/dep11/icons-48x48.tar.gz
  6f187aa19dc9324cfed84e580c4361ed73b9b4910bd632b1aad4dc527bbac699             1563 main/dep11/icons-64x64.tar.gz
  2028683fdf54ea769792fe29be06bf29aaeabefb43676ecea01cea11a3f3a9a6             2795 main/dep11/icons-64x64@2.tar.gz
 SHA512:
- 57af40390eff55a412dfc6f20354e293a880558929b4be7c4e2be77d653015d948b30f4e1c9afc2aabb19db923e5de2285ee37c5f8ec280259cd0f28242b018a              200 Release
- 20bb256272dd3d39a6e23b1446af4dcd92b335c57fe0af0f561273316ab589426fc84f9b79e37f7246b72fda0055260bee8cf837e6b675ffc2be796b7c433479             3738 main/binary-amd64/Packages
- 9b92ef53adb36743b90202509a08d35f3138a066408d2e8ab551015d9e837c375ab0d809e6910d730f30cefaecaec7fa50e91d440900031643caa5e6e32e6d96             1333 main/binary-amd64/Packages.gz
- 20bb256272dd3d39a6e23b1446af4dcd92b335c57fe0af0f561273316ab589426fc84f9b79e37f7246b72fda0055260bee8cf837e6b675ffc2be796b7c433479             3738 main/binary-arm64/Packages
- 9b92ef53adb36743b90202509a08d35f3138a066408d2e8ab551015d9e837c375ab0d809e6910d730f30cefaecaec7fa50e91d440900031643caa5e6e32e6d96             1333 main/binary-arm64/Packages.gz
- 20bb256272dd3d39a6e23b1446af4dcd92b335c57fe0af0f561273316ab589426fc84f9b79e37f7246b72fda0055260bee8cf837e6b675ffc2be796b7c433479             3738 main/binary-armhf/Packages
- 9b92ef53adb36743b90202509a08d35f3138a066408d2e8ab551015d9e837c375ab0d809e6910d730f30cefaecaec7fa50e91d440900031643caa5e6e32e6d96             1333 main/binary-armhf/Packages.gz
- 20bb256272dd3d39a6e23b1446af4dcd92b335c57fe0af0f561273316ab589426fc84f9b79e37f7246b72fda0055260bee8cf837e6b675ffc2be796b7c433479             3738 main/binary-i386/Packages
- 9b92ef53adb36743b90202509a08d35f3138a066408d2e8ab551015d9e837c375ab0d809e6910d730f30cefaecaec7fa50e91d440900031643caa5e6e32e6d96             1333 main/binary-i386/Packages.gz
- 20bb256272dd3d39a6e23b1446af4dcd92b335c57fe0af0f561273316ab589426fc84f9b79e37f7246b72fda0055260bee8cf837e6b675ffc2be796b7c433479             3738 main/binary-riscv64/Packages
- 9b92ef53adb36743b90202509a08d35f3138a066408d2e8ab551015d9e837c375ab0d809e6910d730f30cefaecaec7fa50e91d440900031643caa5e6e32e6d96             1333 main/binary-riscv64/Packages.gz
- aa3298c938c739256cd66b427f5414d0e162c3da01fd0846fd32eb562a13d18800d8d973de89ddd2320e748d053a7de894a3c6ddadb7829bc3dd6345e24bf2f0             3852 main/dep11/Components-amd64.yml
- 871b0aa243f1e85cd884a25d5af0db29b2354f7fea79068583bcfed5c6416753348ed05f437c7c7c2443b320f1ab02859075c4a1d3fde948ae4b38969a88bad8             1495 main/dep11/Components-amd64.yml.gz
- aa3298c938c739256cd66b427f5414d0e162c3da01fd0846fd32eb562a13d18800d8d973de89ddd2320e748d053a7de894a3c6ddadb7829bc3dd6345e24bf2f0             3852 main/dep11/Components-arm64.yml
- 871b0aa243f1e85cd884a25d5af0db29b2354f7fea79068583bcfed5c6416753348ed05f437c7c7c2443b320f1ab02859075c4a1d3fde948ae4b38969a88bad8             1495 main/dep11/Components-arm64.yml.gz
- aa3298c938c739256cd66b427f5414d0e162c3da01fd0846fd32eb562a13d18800d8d973de89ddd2320e748d053a7de894a3c6ddadb7829bc3dd6345e24bf2f0             3852 main/dep11/Components-armhf.yml
- 871b0aa243f1e85cd884a25d5af0db29b2354f7fea79068583bcfed5c6416753348ed05f437c7c7c2443b320f1ab02859075c4a1d3fde948ae4b38969a88bad8             1495 main/dep11/Components-armhf.yml.gz
- aa3298c938c739256cd66b427f5414d0e162c3da01fd0846fd32eb562a13d18800d8d973de89ddd2320e748d053a7de894a3c6ddadb7829bc3dd6345e24bf2f0             3852 main/dep11/Components-i386.yml
- 871b0aa243f1e85cd884a25d5af0db29b2354f7fea79068583bcfed5c6416753348ed05f437c7c7c2443b320f1ab02859075c4a1d3fde948ae4b38969a88bad8             1495 main/dep11/Components-i386.yml.gz
- aa3298c938c739256cd66b427f5414d0e162c3da01fd0846fd32eb562a13d18800d8d973de89ddd2320e748d053a7de894a3c6ddadb7829bc3dd6345e24bf2f0             3852 main/dep11/Components-riscv64.yml
- 871b0aa243f1e85cd884a25d5af0db29b2354f7fea79068583bcfed5c6416753348ed05f437c7c7c2443b320f1ab02859075c4a1d3fde948ae4b38969a88bad8             1495 main/dep11/Components-riscv64.yml.gz
+ a8af1e823af7c6b404aee6e4c7582c9ab23ede86db306787f54994efac613b2b6debbe86e50efd689edee734b26f2998e151058264ead0562a4ca585417886b4              200 Release
+ a5199382868c4bea3f6776c4e39a12c3d5b694a77251b58753acac09a0b2c676f10c82ad9bedf3b3d4f84849a835f1a05e5b8439878194b0b2a1dcfab64fe88e             5607 main/binary-amd64/Packages
+ b8e1c0dd8ffe2cd249d6cc260f8bdd50f24396d30b0985a56fb0b1e3e918582262da95fb88ec2644c70e55b00705f9005c472d19df5966daab441fd2ea9f85e7             1547 main/binary-amd64/Packages.gz
+ a5199382868c4bea3f6776c4e39a12c3d5b694a77251b58753acac09a0b2c676f10c82ad9bedf3b3d4f84849a835f1a05e5b8439878194b0b2a1dcfab64fe88e             5607 main/binary-arm64/Packages
+ b8e1c0dd8ffe2cd249d6cc260f8bdd50f24396d30b0985a56fb0b1e3e918582262da95fb88ec2644c70e55b00705f9005c472d19df5966daab441fd2ea9f85e7             1547 main/binary-arm64/Packages.gz
+ a5199382868c4bea3f6776c4e39a12c3d5b694a77251b58753acac09a0b2c676f10c82ad9bedf3b3d4f84849a835f1a05e5b8439878194b0b2a1dcfab64fe88e             5607 main/binary-armhf/Packages
+ b8e1c0dd8ffe2cd249d6cc260f8bdd50f24396d30b0985a56fb0b1e3e918582262da95fb88ec2644c70e55b00705f9005c472d19df5966daab441fd2ea9f85e7             1547 main/binary-armhf/Packages.gz
+ a5199382868c4bea3f6776c4e39a12c3d5b694a77251b58753acac09a0b2c676f10c82ad9bedf3b3d4f84849a835f1a05e5b8439878194b0b2a1dcfab64fe88e             5607 main/binary-i386/Packages
+ b8e1c0dd8ffe2cd249d6cc260f8bdd50f24396d30b0985a56fb0b1e3e918582262da95fb88ec2644c70e55b00705f9005c472d19df5966daab441fd2ea9f85e7             1547 main/binary-i386/Packages.gz
+ a5199382868c4bea3f6776c4e39a12c3d5b694a77251b58753acac09a0b2c676f10c82ad9bedf3b3d4f84849a835f1a05e5b8439878194b0b2a1dcfab64fe88e             5607 main/binary-riscv64/Packages
+ b8e1c0dd8ffe2cd249d6cc260f8bdd50f24396d30b0985a56fb0b1e3e918582262da95fb88ec2644c70e55b00705f9005c472d19df5966daab441fd2ea9f85e7             1547 main/binary-riscv64/Packages.gz
+ e7065598f82ea4b345c6d28436ed73bcd1b3b5ef47aaec3eea7899a275f8ca85e286f28d211619c18a99c425bffb59a2130d62272b0f5a75f552ec19546730c3             3875 main/dep11/Components-amd64.yml
+ ff6834b1e2a0e0aa629ed6a9894647c5388a4463ff1ee83357a8b6e84a3f110d7620b1c90f52dff33d63bfa7ab0d36cbdba462e40cae8ae48a6a09400dbc2223             1493 main/dep11/Components-amd64.yml.gz
+ e7065598f82ea4b345c6d28436ed73bcd1b3b5ef47aaec3eea7899a275f8ca85e286f28d211619c18a99c425bffb59a2130d62272b0f5a75f552ec19546730c3             3875 main/dep11/Components-arm64.yml
+ ff6834b1e2a0e0aa629ed6a9894647c5388a4463ff1ee83357a8b6e84a3f110d7620b1c90f52dff33d63bfa7ab0d36cbdba462e40cae8ae48a6a09400dbc2223             1493 main/dep11/Components-arm64.yml.gz
+ e7065598f82ea4b345c6d28436ed73bcd1b3b5ef47aaec3eea7899a275f8ca85e286f28d211619c18a99c425bffb59a2130d62272b0f5a75f552ec19546730c3             3875 main/dep11/Components-armhf.yml
+ ff6834b1e2a0e0aa629ed6a9894647c5388a4463ff1ee83357a8b6e84a3f110d7620b1c90f52dff33d63bfa7ab0d36cbdba462e40cae8ae48a6a09400dbc2223             1493 main/dep11/Components-armhf.yml.gz
+ e7065598f82ea4b345c6d28436ed73bcd1b3b5ef47aaec3eea7899a275f8ca85e286f28d211619c18a99c425bffb59a2130d62272b0f5a75f552ec19546730c3             3875 main/dep11/Components-i386.yml
+ ff6834b1e2a0e0aa629ed6a9894647c5388a4463ff1ee83357a8b6e84a3f110d7620b1c90f52dff33d63bfa7ab0d36cbdba462e40cae8ae48a6a09400dbc2223             1493 main/dep11/Components-i386.yml.gz
+ e7065598f82ea4b345c6d28436ed73bcd1b3b5ef47aaec3eea7899a275f8ca85e286f28d211619c18a99c425bffb59a2130d62272b0f5a75f552ec19546730c3             3875 main/dep11/Components-riscv64.yml
+ ff6834b1e2a0e0aa629ed6a9894647c5388a4463ff1ee83357a8b6e84a3f110d7620b1c90f52dff33d63bfa7ab0d36cbdba462e40cae8ae48a6a09400dbc2223             1493 main/dep11/Components-riscv64.yml.gz
  88569baff2589b9ce474ea9a28a23a09fb6544b54e23841380347d4f5d0790b261f33638252cca7d72994f8a80c82d9f1fc19dde06096bebee685c6663e545a6             2874 main/dep11/icons-128x128.tar.gz
  0eabcfce9ff512dec5178865ca558cd2d267e980921a2b561ce0bf0f6ecedb8fe398b3c0fd0aa4cebebf2cca450829dccc592d2be0e8c3d49fc01be138509fc9             5196 main/dep11/icons-128x128@2.tar.gz
  fe02cbac0fdfd13518bbd7fa0fc1c9060be39eedf44299ddab16b646b8f1576835032774ce1947c3ec517c39ff5d08dd64584f7d51b7d619bffaa10b8f803875             1489 main/dep11/icons-48x48.tar.gz

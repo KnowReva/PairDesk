@@ -109,6 +109,19 @@ Branding:
     scheme-preference: dark
     value: "#1d232b"
 Releases:
+- version: "2.9.5"
+  type: stable
+  unix-timestamp: 1794528000
+  description:
+    C: |-
+      <p>The desktop window's bar shows whether the keys go to the remote desktop or stay on this computer.</p>
+- version: "2.9.4"
+  type: stable
+  unix-timestamp: 1794528000
+  description:
+    C: |-
+      <p>Keyboard shortcuts such as Alt+Tab stay in the remote desktop; Right Ctrl or the keyboard button gives
+      the keyboard back.</p>
 - version: "2.9.3"
   type: stable
   unix-timestamp: 1794528000
@@ -122,18 +135,5 @@ Releases:
   description:
     C: |-
       <p>The sign-out notice respects Cancel and says so on the connecting computer.</p>
-- version: "2.9.1"
-  type: stable
-  unix-timestamp: 1794009600
-  description:
-    C: |-
-      <p>Fixed signing out the other computer's session from its notice.</p>
-- version: "2.9.0"
-  type: stable
-  unix-timestamp: 1794009600
-  description:
-    C: |-
-      <p>Pairing uses a new random key for every attempt, with nothing shared between installs. Pairing codes
-      are hidden until you press Show.</p>
 ContentRating:
   oars-1.1: {}
