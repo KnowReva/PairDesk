@@ -1,3 +1,25 @@
+pairdesk (2.9.7-1) unstable; urgency=medium
+
+  * "Use all monitors": a PairDesk bar on each monitor (top left), with
+    Minimize and Full screen on/off for the whole desktop and a keyboard button
+    that works there too; FreeRDP's own bar is off while PairDesk's are shown.
+  * Virtual camera: installs the kernel headers its driver needs; when the
+    driver doesn't build for the kernel, takes it out again (apt stays
+    healthy) and says why once, instead of asking again and again.
+  * pairdesk --version.
+
+ -- KnowReva <rahul.thakar@knowreva.com>  Sat, 14 Nov 2026 17:10:00 -0500
+
+pairdesk (2.9.6-1) unstable; urgency=medium
+
+  * "Use all monitors": PairDesk's bar (USB, camera, folders, sound, keys,
+    Disconnect) drops down at the top left of the main monitor, over FreeRDP's
+    own window and bar.
+  * USB: a device sent at the start of a session is no longer sent twice; the
+    second attempt used to undo the first ("didn't hand it over").
+
+ -- KnowReva <rahul.thakar@knowreva.com>  Sat, 14 Nov 2026 16:40:00 -0500
+
 pairdesk (2.9.5-1) unstable; urgency=medium
 
   * Desktop bar shows where the keys go: "Keys: remote" or "Keys: this computer".

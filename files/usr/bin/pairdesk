@@ -26,6 +26,7 @@ clipboard and sound, both ways, over PairDesk's own encrypted link.
   pairdesk update NAME        update whichever computer has the older PairDesk (asks first)
   pairdesk update --install   install the update a paired computer sent here
   pairdesk features | install NAME | uninstall
+  pairdesk --version          the PairDesk version on the current computer
 """
 
 import getpass
@@ -659,6 +660,8 @@ def cli(argv):
             return
         rep = C.install_feature(a[0], on_line=term_progress)
         print("Installed: " + (", ".join(rep.get("installed", [])) or "nothing new needed"))
+        if not C.feature_present(a[0]):     # never "nothing new needed" for something that still doesn't work
+            raise SystemExit("pairdesk: %s still isn't usable here." % C.FEATURES[a[0]]["title"])
         return
     if cmd == "features":
         for k, v in C.FEATURES.items():
@@ -1062,12 +1065,106 @@ class X11:
         return out
 
     @classmethod
-    def press_right_ctrl(cls, win):
-        """Press and release Right Ctrl in the embedded viewer: the same as pressing it on the keyboard (FreeRDP
-        gives the keyboard back, or takes it again). Returns False when there is no viewer yet."""
+    def _prop(cls, win, name, length=4096):
+        """A 32-bit window property (a list of numbers), [] when there is none."""
         X, dpy = cls._init()
         ct = cls._ct
-        kids = cls.children(win)
+        if not dpy:
+            return []
+        X.XInternAtom.restype = ct.c_ulong
+        X.XInternAtom.argtypes = [ct.c_void_p, ct.c_char_p, ct.c_int]
+        X.XGetWindowProperty.argtypes = [ct.c_void_p, ct.c_ulong, ct.c_ulong, ct.c_long, ct.c_long, ct.c_int,
+                                         ct.c_ulong, ct.POINTER(ct.c_ulong), ct.POINTER(ct.c_int),
+                                         ct.POINTER(ct.c_ulong), ct.POINTER(ct.c_ulong),
+                                         ct.POINTER(ct.POINTER(ct.c_ubyte))]
+        atom = X.XInternAtom(dpy, name, 1)
+        if not atom:
+            return []
+        typ, fmt, n, after, data = ct.c_ulong(), ct.c_int(), ct.c_ulong(), ct.c_ulong(), ct.POINTER(ct.c_ubyte)()
+        if X.XGetWindowProperty(dpy, win, atom, 0, length, 0, 0, ct.byref(typ), ct.byref(fmt), ct.byref(n),
+                                ct.byref(after), ct.byref(data)) != 0 or not data:
+            return []
+        try:
+            if fmt.value != 32:
+                return []
+            arr = ct.cast(data, ct.POINTER(ct.c_ulong))        # format 32 comes back as an array of longs
+            return [arr[i] for i in range(n.value)]
+        finally:
+            X.XFree(data)
+
+    @classmethod
+    def window_of_pid(cls, pid):
+        """The top-level window of a program (FreeRDP's own window, all monitors), None when not found."""
+        X, dpy = cls._init()
+        if not dpy or not pid:
+            return None
+        X.XDefaultRootWindow.restype = cls._ct.c_ulong
+        X.XDefaultRootWindow.argtypes = [cls._ct.c_void_p]
+        for w in cls._prop(X.XDefaultRootWindow(dpy), b"_NET_CLIENT_LIST"):
+            if cls._prop(w, b"_NET_WM_PID", 1)[:1] == [pid]:
+                return w
+        return None
+
+    @classmethod
+    def iconify(cls, win):
+        X, dpy = cls._init()
+        if not dpy or not win:
+            return False
+        X.XDefaultScreen.argtypes = [cls._ct.c_void_p]
+        X.XIconifyWindow.argtypes = [cls._ct.c_void_p, cls._ct.c_ulong, cls._ct.c_int]
+        ok = X.XIconifyWindow(dpy, win, X.XDefaultScreen(dpy))
+        X.XFlush(dpy)
+        return bool(ok)
+
+    @classmethod
+    def send_keys(cls, win, keysyms):
+        """Press the keys in order and release them in reverse, in that window (FreeRDP's own window: its
+        Ctrl+Alt+Enter turns full screen on and off on all monitors at once)."""
+        X, dpy = cls._init()
+        ct = cls._ct
+        if not dpy or not win:
+            return False
+
+        class Key(ct.Structure):
+            _fields_ = [("type", ct.c_int), ("serial", ct.c_ulong), ("send_event", ct.c_int),
+                        ("display", ct.c_void_p), ("window", ct.c_ulong), ("root", ct.c_ulong),
+                        ("subwindow", ct.c_ulong), ("time", ct.c_ulong), ("x", ct.c_int), ("y", ct.c_int),
+                        ("x_root", ct.c_int), ("y_root", ct.c_int), ("state", ct.c_uint), ("keycode", ct.c_uint),
+                        ("same_screen", ct.c_int)]
+
+        class Event(ct.Union):
+            _fields_ = [("xkey", Key), ("pad", ct.c_long * 24)]
+        X.XDefaultRootWindow.restype = ct.c_ulong
+        X.XDefaultRootWindow.argtypes = [ct.c_void_p]
+        X.XKeysymToKeycode.restype = ct.c_ubyte
+        X.XKeysymToKeycode.argtypes = [ct.c_void_p, ct.c_ulong]
+        X.XSendEvent.argtypes = [ct.c_void_p, ct.c_ulong, ct.c_int, ct.c_long, ct.c_void_p]
+        mods = {0xffe3: 4, 0xffe4: 4, 0xffe9: 8, 0xffea: 8, 0xffe1: 1, 0xffe2: 1}   # Control, Alt (Mod1), Shift
+        codes = [X.XKeysymToKeycode(dpy, k) for k in keysyms]
+        if not all(codes):
+            return False
+        X.XSetInputFocus(dpy, win, 2, 0)
+        state, root = 0, X.XDefaultRootWindow(dpy)
+        steps = [(2, k, c) for k, c in zip(keysyms, codes)] + [(3, k, c) for k, c in reversed(list(zip(keysyms, codes)))]
+        for kind, sym, code in steps:       # each event carries the modifiers held before it, as X does
+            ev = Event()
+            ev.xkey = Key(type=kind, display=dpy, window=win, root=root, state=state, keycode=code, same_screen=1)
+            X.XSendEvent(dpy, win, 1, 1 if kind == 2 else 2, ct.byref(ev))
+            if kind == 2:
+                state |= mods.get(sym, 0)
+            else:
+                state &= ~mods.get(sym, 0)
+        X.XSync(dpy, 0)
+        return True
+
+    @classmethod
+    def press_right_ctrl(cls, win, top=False):
+        """Press and release Right Ctrl in the embedded viewer (top=True: in this window itself, FreeRDP's own
+        window on all monitors): the same as pressing it on the keyboard (FreeRDP gives the keyboard back, or
+        takes it again). Returns False when there is no viewer yet."""
+        X, dpy = cls._init()
+        ct = cls._ct
+        kids = [win] if top and win else cls.children(win)
         if not dpy or not kids:
             return False
 
@@ -1350,11 +1447,15 @@ def gui(auto_connect=None):
         full screen, minimize, USB devices, camera, folders, the PairDesk window and Disconnect. In full screen
         the toolbar drops down when the pointer touches the top edge."""
 
-        def __init__(self, app, s):
+        def __init__(self, app, s, bar_only=False):
             super().__init__(title="%s - PairDesk" % s.name)
             self.app, self.s = app, s
             self.xid = None
+            self.bar_only = bar_only     # all monitors: FreeRDP's own window; only the drop-down bar is ours
             self.set_icon_name("pairdesk")
+            if bar_only:
+                self._bar_only_init()
+                return
             mon = self.get_display().get_primary_monitor() or self.get_display().get_monitor(0)
             g = mon.get_geometry()
             self.set_default_size(int(g.width * 0.8), int(g.height * 0.8))
@@ -1384,6 +1485,29 @@ def gui(auto_connect=None):
             self._hide_at = 0
             GLib.timeout_add(150, self.watch_pointer)
             if getattr(s, "opts", {}).get("keep_keyboard", True) and X11.watch_keys():
+                self.keys_watched = True
+                GLib.timeout_add(100, self.poll_keys)
+            self.show_keyboard()
+
+        def _bar_only_init(self):
+            """"Use all monitors": FreeRDP shows the desktop on every monitor in its own window (with its own
+            bar for minimize, full screen and close, in the middle). PairDesk's bar drops down at the top
+            left of the main monitor when the pointer touches the top edge there."""
+            self.is_full = True
+            self.pops = []                  # one drop-down bar per monitor
+            for _i in range(max(1, self.get_display().get_n_monitors())):
+                p = Gtk.Window(type=Gtk.WindowType.POPUP)
+                p.get_style_context().add_class("pd-pop")
+                p.add(self.make_bar(True))
+                p.hide_at = 0
+                self.pops.append(p)
+            self.pop = self.pops[0]
+            self.pop_menu_open = False
+            self.bar = self.pop
+            self.kstate = C.KeyboardState(lambda where: self.show_keyboard())
+            self._hide_at = 0
+            GLib.timeout_add(150, self.watch_pointer)
+            if getattr(self.s, "opts", {}).get("keep_keyboard", True) and X11.watch_keys():
                 self.keys_watched = True
                 GLib.timeout_add(100, self.poll_keys)
             self.show_keyboard()
@@ -1445,14 +1569,17 @@ def gui(auto_connect=None):
                 self.pop.hide()
 
         def watch_pointer(self):
-            if not self.get_realized():
+            if getattr(self, "_closed", False) or not self.bar_only and not self.get_realized():
                 return False
-            if not self.is_full or not self.get_property("is-active") and not self.pop.get_visible():
+            active = self.bar_only or self.get_property("is-active")
+            if not self.is_full or not active and not self.pop.get_visible():
                 return True
             seat = self.get_display().get_default_seat()
             _scr, x, y = seat.get_pointer().get_position()
             mon = self.monitor()
             now = time.time()
+            if self.bar_only:
+                return self._watch_monitors(x, y, now)
             if mon.x <= x < mon.x + mon.width and y <= mon.y + 1:
                 if not self.pop.get_visible():
                     self.pop.show_all()
@@ -1471,6 +1598,45 @@ def gui(auto_connect=None):
                 else:
                     self._hide_at = 0
             return True
+
+        def _watch_monitors(self, x, y, now):
+            """All monitors: each monitor's bar drops down when the pointer touches that monitor's top edge."""
+            disp = self.get_display()
+            for i, p in enumerate(self.pops):
+                m = disp.get_monitor(i)
+                if m is None:
+                    continue
+                g = m.get_geometry()
+                inside = g.x <= x < g.x + g.width
+                if inside and g.y <= y <= g.y + 1:
+                    if not p.get_visible():
+                        p.show_all()
+                        p.move(g.x + 12, g.y)
+                    p.hide_at = 0
+                elif p.get_visible() and not self.pop_menu_open:
+                    if not inside or y > g.y + p.get_allocated_height() + 30:
+                        if not p.hide_at:
+                            p.hide_at = now + 1.2
+                        elif now >= p.hide_at:
+                            p.hide()
+                            p.hide_at = 0
+                else:
+                    p.hide_at = 0
+            return True
+
+        def viewer(self):
+            """FreeRDP's own window (all monitors), found by its process."""
+            rdp = getattr(self.s, "rdp", None)
+            return X11.window_of_pid(rdp.pid) if rdp is not None and rdp.poll() is None else None
+
+        def viewer_minimize(self, *_):
+            if not X11.iconify(self.viewer()):
+                self.app.log("The desktop window isn't there yet.")
+
+        def viewer_full(self, *_):
+            """FreeRDP's own Ctrl+Alt+Enter: full screen on or off, on all monitors together."""
+            if not X11.send_keys(self.viewer(), [0xffe3, 0xffe9, 0xff0d]):
+                self.app.log("Press Ctrl+Alt+Enter in the desktop to leave or enter full screen.")
 
         # -- toolbar
         def make_bar(self, popup):
@@ -1511,6 +1677,12 @@ def gui(auto_connect=None):
                            False, False, 0)
             bar.pack_end(btn("system-shutdown-symbolic", "Disconnect", self.on_disconnect, "pd-danger"),
                          False, False, 0)
+            if self.bar_only:       # all monitors: FreeRDP's own window, both monitors together
+                bar.pack_end(btn("view-fullscreen-symbolic", "Full screen on/off, all monitors (Ctrl+Alt+Enter)",
+                                 self.viewer_full), False, False, 0)
+                bar.pack_end(btn("window-minimize-symbolic", "Minimize (all monitors)", self.viewer_minimize),
+                             False, False, 0)
+                return bar
             full = btn("view-fullscreen-symbolic", "Full screen", self.toggle_full)
             if not hasattr(self, "full_buttons"):
                 self.full_buttons = []
@@ -1523,17 +1695,23 @@ def gui(auto_connect=None):
             """The same as Right Ctrl: the viewer gives the keyboard back to this computer, or takes it again."""
             if self.xid and X11.press_right_ctrl(self.xid):
                 self.kstate.button()          # a sent key isn't seen as a raw press: follow it here
+            elif self.bar_only and X11.press_right_ctrl(self.viewer(), top=True):
+                self.kstate.button()
+            elif self.bar_only:
+                self.app.log("Press Right Ctrl to switch the keyboard (the desktop isn't ready yet).")
             else:
                 self.app.log("Press Right Ctrl to switch the keyboard (the desktop isn't ready yet).")
 
         def poll_keys(self):
-            if not self.get_realized():
+            if getattr(self, "_closed", False) or not self.bar_only and not self.get_realized():
                 return False
+            # all monitors: the viewer is FreeRDP's own full-screen window, so a key or a click is in it
+            active = self.bar_only or self.get_property("is-active")
             for what in X11.raw_presses():
                 if what == "right_ctrl":
-                    self.kstate.right_ctrl(self.get_property("is-active"))
+                    self.kstate.right_ctrl(active)
                 elif what == "click":
-                    self.kstate.click(self.get_property("is-active") and self.pointer_in_desktop())
+                    self.kstate.click(active and (self.bar_only or self.pointer_in_desktop()))
             return True
 
         def pointer_in_desktop(self):
@@ -1720,7 +1898,9 @@ def gui(auto_connect=None):
             return True
 
         def close_window(self):
-            self.pop.destroy()
+            self._closed = True
+            for p in getattr(self, "pops", [self.pop]):
+                p.destroy()
             self.destroy()
 
     class App(Gtk.Window):
@@ -3276,6 +3456,15 @@ def gui(auto_connect=None):
                 Gtk.main_iteration()
             return self.desk.target()
 
+        def open_bar_window(self, s):
+            """Called while connecting with "Use all monitors": PairDesk's bar over FreeRDP's own window."""
+            d = getattr(self, "desk", None)
+            if d is not None and d.s is s and getattr(d, "bar_only", False):
+                return True                 # the view is opened again (sound changes): same bar
+            self.close_desktop_window()
+            self.desk = DesktopWindow(self, s, bar_only=True)
+            return True
+
         def close_desktop_window(self):
             d = getattr(self, "desk", None)
             self.desk = None
@@ -3317,6 +3506,7 @@ def gui(auto_connect=None):
                 s.on_update = self.before_login
                 if self.cfg.get("desktop_in_window", True) and "X11" in type(self.get_display()).__name__:
                     s.embed_host = lambda: self.in_main(lambda: self.open_desktop_window(s))
+                    s.bar_host = lambda: self.in_main(lambda: self.open_bar_window(s))
             except C.DBError as e:
                 self.error(str(e))
                 return
@@ -3406,6 +3596,10 @@ def gui(auto_connect=None):
                 return
 
             def start():
+                blocked = (s.info.get("feature_why") or {}).get("camera-receive")
+                if blocked and not (s.info.get("features") or {}).get("camera-receive"):
+                    self.error("%s can't show a camera sent from here: %s" % (s.name, blocked))
+                    return
                 if not (s.info.get("features") or {}).get("camera-receive"):
                     self.remote_install(s, ["camera-receive"], go, why="To show a camera sent from here, %s "
                                         "needs a virtual camera." % s.name)
@@ -4739,6 +4933,9 @@ def main():
     argv = sys.argv[1:]
     if argv and argv[0] in ("-h", "--help", "help"):
         print(__doc__)
+        return
+    if argv and argv[0] in ("-V", "--version", "version"):
+        print("PairDesk %s (package %s)" % (C.VERSION, C.installed_version() or "not installed"))
         return
     if argv and argv[0] == "--askpass" or (len(argv) == 1 and os.environ.get("SSH_ASKPASS_REQUIRE")
                                            and not argv[0].startswith("-") and " " in argv[0]):

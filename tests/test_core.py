@@ -460,6 +460,39 @@ class Camera(unittest.TestCase):
         self.assertEqual(C.remote_install_command(["camera-receive"]), "pairdesk install camera-receive")
 
 
+class Version(unittest.TestCase):
+    def test_version_is_the_same_everywhere(self):
+        root = os.path.join(os.path.dirname(__file__), "..")
+        changelog = open(os.path.join(root, "debian", "changelog")).readline()
+        self.assertIn("(%s-1)" % C.VERSION, changelog)
+        meta = open(os.path.join(root, "files", "usr", "share", "metainfo", "com.knowreva.PairDesk.metainfo.xml")).read()
+        self.assertIn('<release version="%s"' % C.VERSION, meta)
+        app = open(os.path.join(root, "files", "usr", "bin", "pairdesk")).read()
+        self.assertIn('"--version"', app)
+
+
+class CameraDriverDoesNotBuild(unittest.TestCase):
+    """14 Nov: v4l2loopback 0.15.0 doesn't build for kernel 7.2; the remote computer was asked to install
+    the virtual camera again and again, and each try left apt half done. Now the reason is kept per kernel."""
+
+    def test_reason_is_kept_for_this_kernel_only(self):
+        with tempfile.TemporaryDirectory() as t:
+            f = os.path.join(t, "camera-unavailable.json")
+            self.assertIsNone(C.camera_blocked(f, "7.2.12"))
+            with open(f, "w") as fh:
+                fh.write('{"kernel": "7.2.12", "why": "its driver can\'t be built"}')
+            self.assertEqual(C.camera_blocked(f, "7.2.12"), "its driver can't be built")
+            self.assertIsNone(C.camera_blocked(f, "7.3.1"))        # a new kernel: try again
+
+    def test_the_helper_takes_the_driver_out_and_says_why(self):
+        text = open(os.path.join(os.path.dirname(__file__), "..", "files", "usr", "libexec", "pairdesk",
+                                 "root-helper")).read()
+        give_up = text[text.index("def camera_give_up"):text.index("def install_feature")]
+        self.assertIn('"apt-get", "remove", "-y", "v4l2loopback-dkms"', give_up)
+        self.assertIn('"dpkg", "--configure", "-a"', give_up)
+        self.assertIn("CAMERA_BLOCKED", give_up)
+
+
 class EmbeddedDesktop(unittest.TestCase):
     def _args(self, embed, opts):
         s = C.Session.__new__(C.Session)
@@ -480,6 +513,99 @@ class EmbeddedDesktop(unittest.TestCase):
         a = self._args(None, {"fullscreen": True})
         self.assertIn("/f", a)
         self.assertTrue(any(x.startswith("/floatbar") for x in a))
+
+
+class AllMonitors(unittest.TestCase):
+    """"Use all monitors": FreeRDP's own window (it can't sit inside PairDesk's), with PairDesk's bar over it."""
+
+    def session(self, multimon):
+        s = C.Session.__new__(C.Session)
+        s.name, s.p, s.lrdp, s.audio_module = "office-pc", {"user": "alex", "host": "h"}, 45000, None
+        s.embed_host = mock.Mock(return_value=(0x2a00007, 1440, 900))
+        s.bar_host = mock.Mock()
+        s.log = lambda m: None
+        s.clean_audio_off = lambda: None
+        opts = {"multimon": multimon, "keep_keyboard": False}
+        with mock.patch.object(C, "rdp_client", return_value=("/usr/bin/xfreerdp3", 3)), \
+                mock.patch.object(C.subprocess, "Popen") as popen:
+            s.start_desktop("pw", opts)
+        args = popen.call_args[0][0] if popen.call_args else None
+        written = popen.return_value.stdin.write.call_args[0][0] if popen.return_value.stdin.write.called else ""
+        return s, args, written
+
+    def test_all_monitors_gets_the_pairdesk_bar_not_the_embedded_window(self):
+        s, _args, written = self.session(True)
+        s.embed_host.assert_not_called()
+        s.bar_host.assert_called_once()
+        self.assertIn("/multimon", written)
+        self.assertFalse(s.embedded)
+        self.assertNotIn("/floatbar", written)      # PairDesk's bars have minimize and full screen
+        self.assertIn("/wm-class:pairdesk", written)
+
+    def test_one_monitor_stays_inside_pairdesks_window(self):
+        s, _args, written = self.session(False)
+        s.embed_host.assert_called_once()
+        s.bar_host.assert_not_called()
+        self.assertIn("/parent-window:%d" % 0x2a00007, written)
+
+    def test_a_bar_that_fails_never_stops_the_desktop(self):
+        s = C.Session.__new__(C.Session)
+        s.name, s.p, s.lrdp, s.audio_module = "office-pc", {"user": "alex", "host": "h"}, 45000, None
+        s.embed_host, s.bar_host = None, mock.Mock(side_effect=RuntimeError("no display"))
+        s.log, s.clean_audio_off = (lambda m: None), (lambda: None)
+        with mock.patch.object(C, "rdp_client", return_value=("/usr/bin/xfreerdp3", 3)), \
+                mock.patch.object(C.subprocess, "Popen"), mock.patch.object(C, "flog") as fl:
+            s.start_desktop("pw", {"multimon": True, "keep_keyboard": False})
+        self.assertTrue(any("PairDesk bar not available" in c[0][0] for c in fl.call_args_list))
+
+    def test_without_pairdesks_bar_freerdp_keeps_its_own(self):
+        s = C.Session.__new__(C.Session)
+        s.p, s.lrdp, s.name = {"user": "alex", "rdp_user": "alex"}, 45000, "office-pc"
+        with mock.patch.object(C, "rdp_client", return_value=("/usr/bin/xfreerdp3", 3)):
+            own = s.rdp_cmd("pw", {"multimon": True}, None, None, own_bar=True)[2]
+            plain = s.rdp_cmd("pw", {"multimon": True}, None, None)[2]
+        self.assertFalse(any(x.startswith("/floatbar") for x in own))
+        self.assertTrue(any(x.startswith("/floatbar") for x in plain))
+
+
+class UsbHandOver(unittest.TestCase):
+    """14 Nov: a webcam and a YubiKey were sent, then "couldn't take over" 2 s later and gone from the
+    remote: the app's 2-second check had queued a second send while the first was still running."""
+
+    def session(self):
+        s = C.Session.__new__(C.Session)
+        s.name, s.p, s.closing = "office-pc", {"rusb": 3241}, False
+        s.sent, s.usb_failed, s.calls = {}, {}, []
+        s.lock = __import__("threading").RLock()
+        s.log = lambda m: None
+        s.call = lambda *a: s.calls.append(("call",) + a)
+        return s
+
+    def test_a_second_send_of_the_same_device_does_nothing(self):
+        s, dev = self.session(), {"busid": "1-3", "name": "Webcam"}
+        helpers = []
+        with mock.patch.object(C, "port_listening", return_value=True), \
+                mock.patch.object(C, "helper", side_effect=lambda *a: helpers.append(a)):
+            s.send_usb(dev)
+            s.send_usb(dev)
+        self.assertEqual(helpers, [("usb-bind", "1-3")])           # bound once, never unbound
+        self.assertEqual([c for c in s.calls if c[1] == "usb-import"], [("call", "usb-import", 3241, "1-3")])
+        self.assertIn("1-3", s.sent)
+
+    def test_a_real_failure_still_unbinds_and_says_why(self):
+        s, dev = self.session(), {"busid": "1-3", "name": "Webcam"}
+
+        def call(*a):
+            raise C.DBError("usbip: error: Attach Request for 1-3 failed - Op Common Status 1")
+        s.call = call
+        helpers = []
+        with mock.patch.object(C, "port_listening", return_value=True), \
+                mock.patch.object(C, "helper", side_effect=lambda *a: helpers.append(a)):
+            with self.assertRaises(C.DBError) as e:
+                s.send_usb(dev)
+        self.assertEqual(helpers, [("usb-bind", "1-3"), ("usb-unbind", "1-3")])
+        self.assertIn("didn't hand it over", str(e.exception))
+        self.assertNotIn("1-3", s.sent)
 
 
 class Sound(unittest.TestCase):

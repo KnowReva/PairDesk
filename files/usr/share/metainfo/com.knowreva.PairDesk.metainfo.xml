@@ -75,6 +75,16 @@
     <display_length compare="ge">720</display_length>
   </requires>
   <releases>
+    <release version="2.9.7" date="2026-11-14">
+      <description>
+        <p>"Use all monitors": a PairDesk bar on each monitor, with minimize and full screen for the whole desktop.</p>
+      </description>
+    </release>
+    <release version="2.9.6" date="2026-11-14">
+      <description>
+        <p>"Use all monitors" shows PairDesk's own bar, and USB devices sent at the start of a session stay on the remote computer.</p>
+      </description>
+    </release>
     <release version="2.9.5" date="2026-11-13">
       <description>
         <p>The desktop window's bar shows whether the keys go to the remote desktop or stay on this computer.</p>

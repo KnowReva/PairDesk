@@ -302,6 +302,24 @@ def has_candidate(pkg):
     return bool(m) and m.group(1) != "(none)"
 
 
+def camera_give_up(tail):
+    """The virtual camera driver doesn't build for this kernel: take the driver package out again, so the
+    system's software installs keep working, and remember why (for this kernel), so no one is asked
+    again and again."""
+    env = dict(os.environ, DEBIAN_FRONTEND="noninteractive")
+    step("The virtual camera driver doesn't build for this kernel: taking it out again")
+    run_stream(["apt-get", "remove", "-y", "v4l2loopback-dkms"], env=env)
+    run_stream(["dpkg", "--configure", "-a"], env=env)
+    why = ("its driver (v4l2loopback) can't be built for this computer's kernel (%s). Send the camera as a "
+           "USB device instead. PairDesk tries again after a kernel update." % os.uname().release)
+    import dbcore
+    os.makedirs(os.path.dirname(dbcore.CAMERA_BLOCKED), exist_ok=True)
+    with open(dbcore.CAMERA_BLOCKED, "w") as f:
+        json.dump({"kernel": os.uname().release, "why": why}, f)
+    os.chmod(dbcore.CAMERA_BLOCKED, 0o644)
+    die("The virtual camera can't be set up: " + why)
+
+
 def install_feature(name):
     """Install one optional feature. Only missing packages are installed (nothing you
     already have is touched); they are marked automatic and recorded, so uninstalling
@@ -312,7 +330,18 @@ def install_feature(name):
         die("unknown feature", 2)
     have = dpkg_installed()
     want, updated = [], False
-    for group in dbcore.FEATURES[name]["packages"]:
+    camera = name == "camera-receive" and not dbcore.loopback_available()
+    if camera and dbcore.camera_blocked():
+        die(dbcore.camera_blocked())
+    groups = list(dbcore.FEATURES[name]["packages"])
+    if camera:          # the driver is built for the running kernel: it needs that kernel's headers
+        groups.append(["linux-headers-" + os.uname().release])
+        if "v4l2loopback-dkms" in have and shutil.which("dkms"):
+            step("Building the virtual camera driver for this kernel")
+            rc, tail = run_stream(["dkms", "autoinstall", "-k", os.uname().release])
+            if not dbcore.loopback_available():
+                camera_give_up(tail)
+    for group in groups:
         if any(p in have for p in group):
             continue
         if group[0] == "sudo" and shutil.which("sudo"):
@@ -337,6 +366,8 @@ def install_feature(name):
     cmd = ["apt-get", "install", "-y", "--no-install-recommends", "-o", "PairDesk::Feature=" + name] + want
     rc, tail = run_stream(cmd, env=env)
     text = "\n".join(tail)
+    if camera and (rc != 0 and "v4l2loopback" in text or rc == 0 and not dbcore.loopback_available()):
+        camera_give_up(tail)
     if rc != 0 and ("--fix-broken" in text or "Unmet dependencies" in text or "dpkg --configure -a" in text
                     or "dpkg was interrupted" in text):
         # An earlier install (PairDesk's or anyone's) was left half done: finish it, then try once more.

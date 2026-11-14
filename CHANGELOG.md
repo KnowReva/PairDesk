@@ -1,5 +1,25 @@
 # Changelog
 
+## 2.9.7 (2026-11-14)
+- **Use all monitors**: a PairDesk bar on **each** monitor: touch the top edge at the left of any monitor.
+  It now has **Minimize** and **Full screen on/off** too, and its keyboard button works there. Both act on
+  the whole remote desktop, all monitors together: it's one desktop in one FreeRDP window, which xrdp and
+  FreeRDP can't split into a window per monitor. FreeRDP's own bar is off while PairDesk's bars are shown.
+- **Virtual camera** on a computer whose kernel its driver (v4l2loopback) doesn't support: PairDesk no longer
+  asks again and again ("Installed: nothing new needed"), and no longer leaves the system's software
+  installs half done. It installs the kernel headers the driver needs; when the driver still doesn't build,
+  it takes it out again and says why, once. Sending the camera as a USB device still works. It tries again
+  after a kernel update.
+- `pairdesk --version` shows the version.
+
+## 2.9.6 (2026-11-14)
+- **Use all monitors** now has PairDesk's bar too: touch the top edge at the left of the main monitor and it
+  drops down with USB devices, camera, folders, sound, where the keys go, help and Disconnect. With all
+  monitors the desktop is FreeRDP's own window, which can't sit inside PairDesk's.
+- USB devices sent when a session starts stay on the remote computer. PairDesk could send the same device a
+  second time while the first hand-over was still running; that one failed with "the current computer didn't
+  hand it over" and took the device back.
+
 ## 2.9.5 (2026-11-13)
 - The desktop window's top bar shows where the keys go: **Keys: remote** (blue) or **Keys: this computer**. It
   follows Right Ctrl, the keyboard button, a click into the desktop and the window getting the focus back.

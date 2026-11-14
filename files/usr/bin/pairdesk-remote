@@ -50,7 +50,8 @@ def info(peer, rusb):
             "rsock": os.path.join(C.link_dir(), "folder-%s.sock" % peer),
             "rdp_backend": st.get("backend") if st.get("server_on") else None,
             "usb_ready": C.port_listening(3240) and C.setup_done(), "wol": C.wol_targets(),
-            "features": {k: C.feature_present(k) for k in ("folders", "usb", "share-out", "camera-receive")}}
+            "features": {k: C.feature_present(k) for k in ("folders", "usb", "share-out", "camera-receive")},
+            "feature_why": {"camera-receive": C.camera_blocked()}}   # can't be installed here: why
 
 
 def add_pending(feature, peer, why):

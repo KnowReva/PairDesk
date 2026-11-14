@@ -21,7 +21,7 @@ import threading
 import time
 
 APP = "pairdesk"
-VERSION = "2.9.5"
+VERSION = "2.9.7"
 HELPER = "/usr/libexec/pairdesk/root-helper"
 SFTP_MARKER = "/usr/bin/pairdesk-sftp"
 SLOT_BASE = 47300          # USB back-channel port on the remote side: SLOT_BASE + 2*slot
@@ -233,6 +233,20 @@ def feature_present(name):
     if name == "camera-receive":
         return bool(shutil.which("ffmpeg")) and loopback_available()
     return False
+
+
+CAMERA_BLOCKED = "/var/lib/pairdesk/camera-unavailable.json"
+
+
+def camera_blocked(path=None, kernel=None):
+    """Why the virtual camera can't work here (its driver doesn't build for this kernel), or None. Kept
+    per kernel: after a kernel update PairDesk may try again."""
+    try:
+        with open(path or CAMERA_BLOCKED) as f:
+            d = json.load(f)
+    except (OSError, ValueError):
+        return None
+    return d.get("why") if d.get("kernel") == (kernel or os.uname().release) else None
 
 
 def loopback_available():
@@ -2428,6 +2442,7 @@ class Session:
         self.camera = None    # {"dev", "name", "procs"} while a camera is sent as video
         self.audio_module = None   # echo cancelling (pactl module) while the desktop is open
         self.embed_host = None   # set by the app: () -> (xid, width, height) to show the desktop in its window
+        self.bar_host = None     # set by the app: () -> None, PairDesk's bar over FreeRDP's own (all monitors) window
         self.taken = {}     # their busid -> dev    (peer devices attached here)
         self.mounted_theirs = None
         self.shared_mine = False
@@ -2734,6 +2749,11 @@ class Session:
         with self.lock:
             if self.closing:
                 return          # disconnecting: devices are being taken back, not sent
+            if dev["busid"] in self.sent:
+                # already on the remote: a second request (the app's 2-second check queues one while the
+                # first hand-over is still running) must not bind it again; its failure used to unbind
+                # the device the first request had just attached ("didn't hand it over")
+                return
             if not port_listening(3240):
                 why = ("The USB service of the current computer (%s) isn't running, so %s can't use its devices. "
                        "Settings > Set up USB sharing turns it on (once)." % (hostname(), self.name))
@@ -2848,7 +2868,7 @@ class Session:
             return None
         return self.p["host"], fp
 
-    def rdp_cmd(self, password, opts, direct=None, embed=None):
+    def rdp_cmd(self, password, opts, direct=None, embed=None, own_bar=False):
         binp, ver = rdp_client()
         if direct:
             # deny = refuse at once (no question) unless the certificate matches the pin
@@ -2862,7 +2882,8 @@ class Session:
         if embed:      # inside PairDesk's window: its toolbar does full screen, USB, camera, ...
             args += ["/parent-window:%d" % embed[0], "/size:%dx%d" % (embed[1], embed[2]), "-toggle-fullscreen"]
         else:          # FreeRDP's own window, with its bar: minimize, full screen on/off, close
-            args.append("/floatbar:sticky:off,default:visible,show:always")
+            if not own_bar:    # (all monitors with PairDesk's bars: those have minimize and full screen)
+                args.append("/floatbar:sticky:off,default:visible,show:always")
             args.append("/wm-class:pairdesk")      # the dock shows it as PairDesk, not as a separate FreeRDP
         args += QUALITY.get(opts.get("quality", "auto"), QUALITY["auto"])
         if opts.get("fullscreen") and not embed:
@@ -2922,7 +2943,14 @@ class Session:
             except Exception as e:  # noqa: BLE001 - FreeRDP's own window still works
                 flog("[%s] desktop window not available: %s" % (self.name, e))
         self.embedded = bool(embed)
-        binp, ver, args = self.rdp_cmd(password, opts, direct, embed)
+        own_bar = False
+        if not embed and self.bar_host and opts.get("multimon"):
+            try:            # all monitors: FreeRDP's own window, with PairDesk's bar on each monitor
+                self.bar_host()
+                own_bar = True
+            except Exception as e:  # noqa: BLE001 - FreeRDP's own bar is used instead
+                flog("[%s] PairDesk bar not available: %s" % (self.name, e))
+        binp, ver, args = self.rdp_cmd(password, opts, direct, embed, own_bar=own_bar)
         if direct:
             self.log("Desktop stream goes directly to %s (certificate pinned)." % direct[0])
         if ver == 3:   # keep the password off the process list
