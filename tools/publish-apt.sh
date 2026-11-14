@@ -5,8 +5,11 @@
 #   tools/publish-apt.sh REPO_DIR [FILE.deb ...]
 #
 # REPO_DIR is the folder served at https://pairdesk.knowreva.com/apt (kept in the site's git repo).
-# New .deb files are added to REPO_DIR/pool/main; older versions stay for downgrades. Signing uses
-# your default gpg key, or GPG_KEY=<key id>. Needs: apt-utils, appstream, appstream-compose, gpg.
+# New .deb files are added to REPO_DIR/pool/main; older versions stay for downgrades. The newest one of
+# each package is also copied next to REPO_DIR as <package>_latest_<arch>.deb (a fixed download link,
+# e.g. https://pairdesk.knowreva.com/pairdesk_latest_all.deb; a copy, as GitHub Pages may not serve
+# symlinks). Signing uses your default gpg key, or GPG_KEY=<key id>. Needs: apt-utils, appstream,
+# appstream-compose, gpg.
 set -euo pipefail
 
 REPO=$(realpath "${1:?usage: tools/publish-apt.sh REPO_DIR [FILE.deb ...]}"); shift
@@ -34,6 +37,12 @@ declare -A best ver
 for deb in "pool/$COMP"/*.deb; do
     p=$(dpkg-deb -f "$deb" Package); v=$(dpkg-deb -f "$deb" Version)
     if [ -z "${ver[$p]:-}" ] || dpkg --compare-versions "$v" gt "${ver[$p]}"; then best[$p]=$deb; ver[$p]=$v; fi
+done
+
+# a fixed link to the newest package, next to the apt folder
+for p in "${!best[@]}"; do
+    arch=$(dpkg-deb -f "${best[$p]}" Architecture)
+    cp -f "${best[$p]}" "../${p}_latest_${arch}.deb.tmp" && mv -f "../${p}_latest_${arch}.deb.tmp" "../${p}_latest_${arch}.deb"
 done
 
 D="dists/$SUITE/$COMP"
@@ -83,4 +92,5 @@ fi
 "${GPG[@]}" --export ${GPG_KEY:+"$GPG_KEY"} > knowreva.gpg
 
 echo "Published $(for p in "${!best[@]}"; do printf '%s %s  ' "$p" "${ver[$p]}"; done)to $REPO"
+echo "Fixed links: $(cd .. && ls ./*_latest_*.deb | sed 's#^\./##' | tr '\n' ' ')"
 echo "Commit and push the site repo to make it live."
