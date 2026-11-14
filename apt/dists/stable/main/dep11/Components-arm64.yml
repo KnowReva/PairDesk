@@ -12,20 +12,18 @@ Name:
 Summary:
   C: Use another computer's desktop with your USB devices
 Description:
-  C: |-
-    <p>PairDesk lets you use another Linux computer on your network as if you were sitting at it: its full
-    desktop with sound, microphone and clipboard, plus your own USB devices and folders.</p>
-    <ul>
-      <li>Use a security key (such as a YubiKey), webcam or USB drive plugged into the computer you sit at
-      on the remote computer, or the other way round</li>
-      <li>Shared folders in both directions</li>
-      <li>Pairing with a one-time code: no passwords sent, nobody in between can take part</li>
-      <li>Its own encrypted connection on its own port, open only while remote access is on</li>
-      <li>Reconnects by itself after a Wi-Fi drop and puts devices and folders back</li>
-      <li>Finds computers on your network; a plain IP address is enough</li>
-      <li>Sets up the other computer over SSH if needed, even without its screen</li>
-      <li>Add-ons are installed only when first needed, after explaining what they are for, and removed cleanly</li>
-    </ul>
+  C: >-
+    <p>
+          PairDesk lets you use another Linux computer on your network as if you were sitting at it:
+          its full desktop with sound, microphone and clipboard, plus your own USB devices and folders.
+        </p>
+    <ul><li>Use a security key (such as a YubiKey), webcam or USB drive plugged into the computer you sit at on the remote
+    computer, or the other way round</li><li>Shared folders in both directions</li><li>Pairing with a one-time code: no passwords
+    sent, nobody in between can take part</li><li>Its own encrypted connection on its own port, open only while remote access
+    is on</li><li>Reconnects by itself after a Wi-Fi drop and puts devices and folders back</li><li>Finds computers on your
+    network; a plain IP address is enough</li><li>Sets up the other computer over SSH if needed, even without its screen</li><li>Add-ons
+    are installed only when first needed, after explaining what they are for, and removed cleanly</li></ul>
+
     <p>PairDesk is a KnowReva project.</p>
 Developer:
   id: com.knowreva
@@ -47,20 +45,20 @@ Url:
   help: https://pairdesk.knowreva.com/help
 Icon:
   cached:
-  - name: com.knowreva.PairDesk.jxl
+  - name: com.knowreva.PairDesk.png
     width: 48
     height: 48
-  - name: com.knowreva.PairDesk.jxl
+  - name: com.knowreva.PairDesk.png
     width: 64
     height: 64
-  - name: com.knowreva.PairDesk.jxl
+  - name: com.knowreva.PairDesk.png
     width: 64
     height: 64
     scale: 2
-  - name: com.knowreva.PairDesk.jxl
+  - name: com.knowreva.PairDesk.png
     width: 128
     height: 128
-  - name: com.knowreva.PairDesk.jxl
+  - name: com.knowreva.PairDesk.png
     width: 128
     height: 128
     scale: 2
@@ -104,36 +102,35 @@ Branding:
   colors:
   - type: primary
     scheme-preference: light
-    value: "#7fb8e8"
+    value: '#7fb8e8'
   - type: primary
     scheme-preference: dark
-    value: "#1d232b"
+    value: '#1d232b'
 Releases:
-- version: "2.9.5"
+- version: 2.9.7
+  type: stable
+  unix-timestamp: 1794614400
+  description:
+    C: >-
+      <p>"Use all monitors": a PairDesk bar on each monitor, with minimize and full screen for the whole desktop.</p>
+- version: 2.9.6
+  type: stable
+  unix-timestamp: 1794614400
+  description:
+    C: >-
+      <p>"Use all monitors" shows PairDesk's own bar, and USB devices sent at the start of a session stay on the remote computer.</p>
+- version: 2.9.5
   type: stable
   unix-timestamp: 1794528000
   description:
-    C: |-
+    C: >-
       <p>The desktop window's bar shows whether the keys go to the remote desktop or stay on this computer.</p>
-- version: "2.9.4"
+- version: 2.9.4
   type: stable
   unix-timestamp: 1794528000
   description:
-    C: |-
-      <p>Keyboard shortcuts such as Alt+Tab stay in the remote desktop; Right Ctrl or the keyboard button gives
-      the keyboard back.</p>
-- version: "2.9.3"
-  type: stable
-  unix-timestamp: 1794528000
-  description:
-    C: |-
-      <p>Signing in at the screen of a connected computer works again; pairing with a reinstalled computer
-      asks to trust its new identity.</p>
-- version: "2.9.2"
-  type: stable
-  unix-timestamp: 1794009600
-  description:
-    C: |-
-      <p>The sign-out notice respects Cancel and says so on the connecting computer.</p>
+    C: >-
+      <p>Keyboard shortcuts such as Alt+Tab stay in the remote desktop; Right Ctrl or the keyboard button gives the keyboard
+      back.</p>
 ContentRating:
   oars-1.1: {}
