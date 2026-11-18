@@ -1,7 +1,28 @@
 __pycache__/
 *.pyc
+
+# Debian build artifacts
 /debian/pairdesk/
 /debian/.debhelper/
 /debian/files
 /debian/*.substvars
 /debian/debhelper-build-stamp
+*.deb
+*.buildinfo
+*.changes
+*.tar.gz
+*.tar.xz
+*.dsc
+
+# Python & test caches
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+
+# Editor and OS files
+.DS_Store
+*~
+*.swp
+*.bak
